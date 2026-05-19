@@ -122,9 +122,13 @@ def delete_user(user_id):
         checkin_count = db.query(Checkin).filter_by(user_id=user_id).count()
 
         if checkin_count == 0:
-            # Xoa assignments truoc
             from models.assignment import Assignment
+            from models.store import Store
+            # Xoa assignments truoc
             db.query(Assignment).filter_by(user_id=user_id).delete()
+            # Null created_by trong stores
+            db.query(Store).filter_by(created_by=user_id).update({"created_by": None})
+            db.flush()
             db.delete(user)
             db.commit()
             return jsonify({"message": f"Da xoa han tai khoan {user.username}", "hard_delete": True})
