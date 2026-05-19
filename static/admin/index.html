@@ -1,0 +1,2214 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin - Sales Field</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --surface3: #2a2f45;
+  --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+  --text: #e8eaf0; --text2: #8b90a0; --text3: #5a5f70;
+  --accent: #3b82f6; --accent2: #2563eb;
+  --success: #22c55e; --warn: #eab308; --danger: #ef4444;
+  --font: 'Be Vietnam Pro', sans-serif;
+  --sidebar-w: 220px; --topbar-h: 56px;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; overflow: hidden; }
+.hidden { display: none !important; }
+
+/* ── LAYOUT ── */
+.layout { display: flex; height: 100vh; }
+
+.sidebar {
+  width: var(--sidebar-w); background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.sidebar-brand {
+  padding: 18px 16px; display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-logo {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--accent); color: #fff;
+  font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.sidebar-brand-text { font-size: 15px; font-weight: 600; }
+.sidebar-brand-sub  { font-size: 11px; color: var(--text2); }
+
+.nav { padding: 10px 8px; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 8px; cursor: pointer;
+  color: var(--text2); font-size: 13px; font-weight: 500;
+  transition: all .15s; border: none; background: none; width: 100%; text-align: left;
+}
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { background: var(--accent); color: #fff; }
+.nav-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+
+.sidebar-footer {
+  padding: 12px 8px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.user-info { padding: 8px 10px; }
+.user-name { font-size: 13px; font-weight: 500; }
+.user-role { font-size: 11px; color: var(--text2); }
+.btn-logout {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  color: var(--text2); font-size: 13px; border: none; background: none;
+  width: 100%; transition: all .15s;
+}
+.btn-logout:hover { background: rgba(239,68,68,.1); color: var(--danger); }
+
+/* ── MAIN ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar {
+  height: var(--topbar-h); padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.topbar-title { font-size: 17px; font-weight: 600; }
+.topbar-actions { display: flex; gap: 8px; }
+
+.content { flex: 1; overflow-y: auto; padding: 24px; }
+
+/* ── PAGES ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── STATS ── */
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px;
+}
+.stat-card-label { font-size: 12px; color: var(--text2); font-weight: 500; text-transform: uppercase; letter-spacing: .5px; }
+.stat-card-value { font-size: 28px; font-weight: 600; margin: 6px 0 2px; }
+.stat-card-sub { font-size: 12px; color: var(--text2); }
+
+/* ── TABLES ── */
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.section-title { font-size: 15px; font-weight: 600; }
+
+.table-wrap {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden; margin-bottom: 24px;
+}
+table { width: 100%; border-collapse: collapse; }
+th {
+  padding: 11px 16px; text-align: left; font-size: 11px;
+  font-weight: 600; color: var(--text2); text-transform: uppercase;
+  letter-spacing: .5px; border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+td {
+  padding: 12px 16px; font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+}
+.badge-retail      { background: #14532D; color: #86EFAC; }
+.badge-agent       { background: #713F12; color: #FDE047; }
+.badge-distributor { background: #7F1D1D; color: #FCA5A5; }
+.badge-new         { background: #374151; color: #9CA3AF; border: 1px solid #4B5563; }
+.badge-admin       { background: #1e3a5f; color: #93c5fd; }
+.badge-manager     { background: #3b2d6e; color: #c4b5fd; }
+.badge-sales       { background: #1c3a2e; color: #6ee7b7; }
+.badge-telesales   { background: #3d2a0f; color: #fcd34d; }
+
+.store-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+/* ── BUTTONS ── */
+.btn {
+  padding: 8px 14px; border-radius: 8px; border: none;
+  cursor: pointer; font-family: var(--font); font-size: 13px; font-weight: 500;
+  transition: all .15s; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-ghost {
+  background: transparent; color: var(--text2);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: rgba(239,68,68,.1); color: var(--danger); border: 1px solid rgba(239,68,68,.2); }
+.btn-danger:hover { background: rgba(239,68,68,.2); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* ── SEARCH ── */
+.search-bar {
+  display: flex; gap: 10px; margin-bottom: 14px;
+}
+.search-input {
+  flex: 1; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-family: var(--font); font-size: 13px; outline: none;
+}
+.search-input:focus { border-color: var(--accent); }
+
+/* ── MODAL ── */
+.modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 16px;
+}
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; width: 100%; max-width: 480px;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px 0;
+}
+.modal-header h2 { font-size: 16px; font-weight: 600; }
+.btn-close {
+  width: 28px; height: 28px; border-radius: 6px; border: none;
+  background: var(--surface2); color: var(--text2); cursor: pointer; font-size: 14px;
+}
+.modal-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal-footer { padding: 0 20px 20px; display: flex; gap: 10px; justify-content: flex-end; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group label { font-size: 12px; color: var(--text2); font-weight: 500; }
+.form-group input, .form-group select {
+  padding: 9px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-family: var(--font); font-size: 14px; outline: none;
+}
+.form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 12px 20px; border-radius: 10px; font-size: 14px;
+  z-index: 9999; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+  transition: opacity .3s;
+}
+.toast.success { border-color: var(--success); color: var(--success); }
+.toast.error   { border-color: var(--danger);  color: var(--danger); }
+
+/* ── MAP PAGE trong admin ── */
+#page-map { height: calc(100vh - var(--topbar-h)); margin: -24px; }
+#admin-map { width: 100%; height: 100%; }
+#admin-map .leaflet-top.leaflet-left { top: auto; bottom: 90px; left: auto; right: 10px; }
+.map-legend {
+  position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px; z-index: 800;
+  display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+  font-size: 12px; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+}
+.legend-item { display: flex; align-items: center; gap: 5px; color: var(--text2); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.map-page-wrap { position: relative; height: 100%; }
+
+@media (max-width: 768px) {
+  #page-map { height: calc(100vh - 60px - 52px); margin: -16px; }
+}
+.checkin-row td:first-child { color: var(--text2); font-size: 12px; }
+.has-photo { color: var(--accent); cursor: pointer; }
+.has-photo:hover { text-decoration: underline; }
+
+@media (max-width: 768px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .sidebar { display: none; }
+  .main { padding-bottom: 64px; }
+  .content { padding: 12px; }
+  .topbar { padding: 0 14px; }
+  .search-bar { flex-wrap: wrap; }
+  .search-bar .search-input { min-width: 0; }
+
+  /* Ẩn table trên mobile, dùng card thay thế */
+  .table-wrap { overflow-x: visible; background: transparent; border: none; border-radius: 0; }
+  .table-wrap table { display: none; }
+  .mobile-cards { display: flex !important; flex-direction: column; gap: 8px; }
+
+  /* Bottom Nav */
+  .bottom-nav {
+    display: flex !important;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
+    background: var(--surface); border-top: 1px solid var(--border);
+    height: 60px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .bottom-nav::-webkit-scrollbar { display: none; }
+  .bottom-nav-item {
+    flex: 0 0 72px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3px;
+    border: none; background: none; color: var(--text2);
+    font-family: var(--font); font-size: 10px; font-weight: 500;
+    cursor: pointer; padding: 6px 4px;
+    transition: color .15s; white-space: nowrap;
+  }
+  .bottom-nav-item .nav-icon { font-size: 20px; width: auto; }
+  .bottom-nav-item.active { color: var(--accent); }
+  .bottom-nav-item:hover { color: var(--text); }
+}
+
+/* Bottom nav ẩn trên desktop */
+.bottom-nav { display: none; }
+
+/* Mobile cards — ẩn trên desktop */
+.mobile-cards { display: none; }
+
+/* Card item style */
+.m-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.m-card-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.m-card-title { font-size: 14px; font-weight: 600; flex: 1; min-width: 0; }
+.m-card-sub { font-size: 11px; color: var(--text2); }
+.m-card-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text2);
+}
+.m-card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+</style>
+
+<style id="admin-theme-extra">
+body.light {
+  --bg: #f0f2f8; --surface: #ffffff; --surface2: #f0f2f8;
+  --border: rgba(0,0,0,0.08); --text: #1a1d27; --text2: #5a6072;
+  --accent: #3b82f6; --accent2: #2563eb;
+  --success: #16a34a; --warn: #ca8a04; --danger: #dc2626;
+}
+body.light .sidebar    { background: #ffffff; border-color: rgba(0,0,0,0.08); }
+body.light .main       { background: #f0f2f8; }
+body.light .topbar     { background: #ffffff; border-color: rgba(0,0,0,0.08); }
+body.light .table-wrap { background: #ffffff; border-color: rgba(0,0,0,0.08); }
+body.light th          { background: #f0f2f8; color: var(--text2); }
+body.light td          { border-color: rgba(0,0,0,0.06); }
+body.light tr:hover td { background: #f5f7fc; }
+body.light .stat-card  { background: #ffffff; border-color: rgba(0,0,0,0.08); }
+body.light .modal-box  { background: #ffffff; }
+body.light .search-input { background: #ffffff; border-color: rgba(0,0,0,0.12); color: var(--text); }
+body.light .form-group input,
+body.light .form-group select { background: #f0f2f8; border-color: rgba(0,0,0,0.12); color: var(--text); }
+body.light .nav-item:not(.active) { color: var(--text2); }
+body.light .nav-item:hover { background: #f0f2f8; color: var(--text); }
+body.light .toast { background: #ffffff; }
+
+.theme-toggle {
+  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text); cursor: pointer;
+  font-size: 16px; display: inline-flex; align-items: center; justify-content: center;
+  margin-left: 8px; transition: background .2s;
+}
+.theme-toggle:hover { background: var(--surface2); }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">SF</div>
+      <div>
+        <div class="sidebar-brand-text">Sales Field</div>
+        <div class="sidebar-brand-sub">Admin Panel</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" onclick="showPage('dashboard', this)">
+        <span class="nav-icon">📊</span> Dashboard
+      </button>
+      <button class="nav-item" onclick="showPage('employees', this)">
+        <span class="nav-icon">👥</span> Nhân viên
+      </button>
+      <button class="nav-item" onclick="showPage('stores', this)">
+        <span class="nav-icon">🏪</span> Cửa hàng
+      </button>
+      <button class="nav-item" onclick="showPage('assignments', this)">
+        <span class="nav-icon">📋</span> Phân công
+      </button>
+      <button class="nav-item" onclick="showPage('checkins', this)">
+        <span class="nav-icon">📍</span> Lịch sử check-in
+      </button>
+      <button class="nav-item" onclick="showPage('calls', this)">
+        <span class="nav-icon">📞</span> Lịch sử gọi điện
+      </button>
+      <button class="nav-item" onclick="showPage('settings', this)">
+        <span class="nav-icon">⚙️</span> Cài đặt
+      </button>
+      <button class="nav-item" onclick="showPage('map', this)">
+        <span class="nav-icon">🗺️</span> Bản đồ
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-name" id="admin-name">—</div>
+        <div class="user-role" id="admin-role">—</div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">
+        <span>⏻</span> Đăng xuất
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <div class="topbar-actions" id="page-actions"></div>
+        <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Chuyển giao diện">🌙</button>
+        <button onclick="doLogout()" title="Đăng xuất" style="
+          width:32px;height:32px;border-radius:8px;border:none;
+          background:transparent;color:var(--text2);cursor:pointer;
+          font-size:16px;display:flex;align-items:center;justify-content:center;
+          flex-shrink:0;
+        ">⏻</button>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- DASHBOARD PAGE -->
+      <div class="page active" id="page-dashboard">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-card-label">Tổng cửa hàng</div>
+            <div class="stat-card-value" id="stat-stores">—</div>
+            <div class="stat-card-sub">đang hoạt động</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-label">Nhân viên</div>
+            <div class="stat-card-value" id="stat-employees">—</div>
+            <div class="stat-card-sub">tài khoản active</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-label">Check-in hôm nay</div>
+            <div class="stat-card-value" id="stat-checkins-today">—</div>
+            <div class="stat-card-sub">lượt ghé thăm</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-label">Chưa ghé tháng này</div>
+            <div class="stat-card-value" id="stat-not-visited">—</div>
+            <div class="stat-card-sub">cửa hàng</div>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <div class="section-title">Check-in gần đây</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Nhân viên</th>
+                <th>Cửa hàng</th>
+                <th>Mô tả</th>
+                <th>Ảnh</th>
+              </tr>
+            </thead>
+            <tbody id="recent-checkins"></tbody>
+          </table>
+          <div class="mobile-cards" id="recent-checkins-cards"></div>
+        </div>
+      </div>
+
+      <!-- EMPLOYEES PAGE -->
+      <div class="page" id="page-employees">
+        <div class="search-bar">
+          <input class="search-input" type="search" placeholder="Tìm nhân viên..."
+                 oninput="filterEmployees(this.value)">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Họ tên</th>
+                <th>Tài khoản</th>
+                <th>Vai trò</th>
+                <th>Số điện thoại</th>
+                <th>Cửa hàng được giao</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="employees-table"></tbody>
+          </table>
+          <div class="mobile-cards" id="employees-cards"></div>
+        </div>
+      </div>
+
+      <!-- STORES PAGE -->
+      <div class="page" id="page-stores">
+        <div class="search-bar" style="flex-wrap:wrap;gap:8px">
+          <input class="search-input" type="search" placeholder="Tìm tên, mã cửa hàng..."
+                 oninput="applyStoreFilters()" id="store-search-q">
+          <select class="search-input" style="flex:0;min-width:150px" onchange="applyStoreFilters()" id="store-filter-type">
+            <option value="">Tất cả loại</option>
+            <option value="retail">Cửa hàng bán lẻ</option>
+            <option value="agent">Đại lý</option>
+            <option value="distributor">Nhà phân phối</option>
+            <option value="new">Chưa mua hàng</option>
+          </select>
+          <select class="search-input" style="flex:0;min-width:150px" onchange="onDistrictChange()" id="store-filter-district">
+            <option value="">Tất cả quận</option>
+          </select>
+          <select class="search-input" style="flex:0;min-width:150px" onchange="applyStoreFilters()" id="store-filter-ward">
+            <option value="">Tất cả phường</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>Tên cửa hàng</th>
+                <th>Loại</th>
+                <th>Địa chỉ</th>
+                <th>Check-in cuối</th>
+                <th>Gọi cuối</th>
+                <th>Được giao cho</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="stores-table"></tbody>
+          </table>
+          <div class="mobile-cards" id="stores-cards"></div>
+        </div>
+      </div>
+
+      <!-- ASSIGNMENTS PAGE -->
+      <div class="page" id="page-assignments">
+        <div class="search-bar">
+          <select class="search-input" id="assignment-filter-user" onchange="applyAssignmentFilter()" style="max-width:220px">
+            <option value="">Tất cả nhân viên</option>
+          </select>
+          <select class="search-input" id="assignment-filter-type" onchange="applyAssignmentFilter()" style="max-width:180px">
+            <option value="">Tất cả loại</option>
+            <option value="retail">Cửa hàng bán lẻ</option>
+            <option value="agent">Đại lý</option>
+            <option value="distributor">Nhà phân phối</option>
+            <option value="new">Chưa mua hàng</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nhân viên</th>
+                <th>Cửa hàng</th>
+                <th>Mã cửa hàng</th>
+                <th>Loại</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="assignments-table"></tbody>
+          </table>
+          <div class="mobile-cards" id="assignments-cards"></div>
+        </div>
+      </div>
+
+      <!-- SETTINGS PAGE -->
+      <div class="page" id="page-settings">
+        <div class="table-wrap" style="max-width:500px">
+          <div style="padding:20px">
+            <div style="font-size:15px;font-weight:600;margin-bottom:16px">Cài đặt hệ thống</div>
+            <div class="form-group" style="margin-bottom:16px">
+              <label>Thời gian check-in tối thiểu (phút)</label>
+              <input type="number" id="setting-min-minutes" min="1" max="480"
+                     style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;outline:none;width:100%">
+              <div style="font-size:11px;color:var(--text2);margin-top:4px">
+                Nhân viên phải ở tại cửa hàng ít nhất bao nhiêu phút trước khi check-out
+              </div>
+            </div>
+
+            <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px;margin-top:20px;
+              text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--border);padding-top:16px">
+              Số ngày hiển thị icon hoạt động
+            </div>
+
+            <div class="form-group" style="margin-bottom:16px">
+              <label style="display:flex;align-items:center;gap:6px">
+                🚩 Check-in (ngày)
+              </label>
+              <input type="number" id="setting-checkin-days" min="1" max="30" value="7"
+                     style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;outline:none;width:100%">
+              <div style="font-size:11px;color:var(--text2);margin-top:4px">
+                Sau bao nhiêu ngày icon 🚩 cờ và ⭐ ngôi sao quay về chấm tròn
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:20px">
+              <label style="display:flex;align-items:center;gap:6px">
+                📞 Gọi điện (ngày)
+              </label>
+              <input type="number" id="setting-call-days" min="1" max="30" value="7"
+                     style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;outline:none;width:100%">
+              <div style="font-size:11px;color:var(--text2);margin-top:4px">
+                Sau bao nhiêu ngày icon 📞 điện thoại và ⭐ ngôi sao quay về chấm tròn
+              </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="saveSettings()">Lưu cài đặt</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHECKINS PAGE -->
+      <div class="page" id="page-checkins">
+        <div class="search-bar">
+          <input class="search-input" type="search" placeholder="Tìm theo tên nhân viên hoặc cửa hàng..."
+                 oninput="filterCheckins(this.value)">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Nhân viên</th>
+                <th>Cửa hàng</th>
+                <th>Mô tả</th>
+                <th>Thời lượng</th>
+                <th>Ảnh</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="checkins-table"></tbody>
+          </table>
+          <div class="mobile-cards" id="checkins-cards"></div>
+        </div>
+      </div>
+
+
+      <!-- CALLS PAGE -->
+      <div class="page" id="page-calls">
+        <div class="search-bar">
+          <input class="search-input" type="search" placeholder="Tìm theo tên nhân viên hoặc cửa hàng..."
+                 oninput="filterCalls(this.value)">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Nhân viên</th>
+                <th>Cửa hàng</th>
+                <th>Ghi chú</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="calls-table"></tbody>
+          </table>
+          <div class="mobile-cards" id="calls-cards"></div>
+        </div>
+      </div>
+
+      <!-- MAP PAGE -->
+      <div class="page" id="page-map">
+        <div class="map-page-wrap">
+          <!-- Filter bar nổi trên bản đồ -->
+          <div id="map-filter-bar" style="
+            position:absolute;top:12px;left:50%;transform:translateX(-50%);
+            z-index:800;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;
+            padding:0 12px;width:100%;max-width:680px;
+          ">
+            <div style="position:relative;flex:1;min-width:160px;max-width:240px">
+              <input id="map-search-input" type="search" placeholder="🔍 Tìm cửa hàng..."
+                oninput="onMapSearchInput(this.value)"
+                onfocus="onMapSearchInput(this.value)"
+                onblur="setTimeout(()=>hideMapSuggestions(),200)"
+                autocomplete="off"
+                style="width:100%;padding:8px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--font);font-size:13px;outline:none;box-shadow:0 2px 8px rgba(0,0,0,.3)">
+              <div id="map-suggestions" style="
+                display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;
+                background:var(--surface);border:1px solid var(--border);
+                border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.4);
+                z-index:1000;max-height:240px;overflow-y:auto;
+              "></div>
+            </div>
+            <select id="map-type-filter" onchange="filterAdminMap()"
+              style="padding:8px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--font);font-size:13px;outline:none;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer">
+              <option value="">Tất cả loại</option>
+              <option value="retail">🟢 Cửa hàng</option>
+              <option value="agent">🟡 Đại lý</option>
+              <option value="distributor">🔴 Nhà PP</option>
+              <option value="new">⚪ Chưa mua</option>
+            </select>
+            <select id="map-activity-filter" onchange="filterAdminMap()"
+              style="padding:8px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--font);font-size:13px;outline:none;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer">
+              <option value="">Tất cả trạng thái</option>
+              <option value="none">Chưa hoạt động</option>
+              <option value="checkin">🚩 Đã check-in (gồm ⭐)</option>
+              <option value="call">📞 Đã gọi điện (gồm ⭐)</option>
+              <option value="both">⭐ Check-in + Gọi điện</option>
+            </select>
+          </div>
+
+          <div id="admin-map"></div>
+
+          <div class="map-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#fff;border:1.5px solid #888"></div> Chưa mua</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#22C55E"></div> Cửa hàng</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#EAB308"></div> Đại lý</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div> Nhà PP</div>
+            <div class="legend-item" style="border-left:1px solid var(--border);padding-left:12px">
+              <svg width="12" height="12" viewBox="0 0 24 24"><polygon points="12,2 15,8.5 22,9.3 17,14 18.2,21 12,17.8 5.8,21 7,14 2,9.3 9,8.5" fill="#aaa"/></svg> CI+Gọi
+            </div>
+            <div class="legend-item">🚩 Check-in</div>
+            <div class="legend-item">📞 Gọi điện</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end content -->
+  </div><!-- end main -->
+</div><!-- end layout -->
+
+<!-- BOTTOM NAV (mobile only) -->
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="bottom-nav-item active" onclick="mobileNav('dashboard', this)">
+    <span class="nav-icon">📊</span>Dashboard
+  </button>
+  <button class="bottom-nav-item" onclick="mobileNav('employees', this)">
+    <span class="nav-icon">👥</span>Nhân viên
+  </button>
+  <button class="bottom-nav-item" onclick="mobileNav('stores', this)">
+    <span class="nav-icon">🏪</span>Cửa hàng
+  </button>
+  <button class="bottom-nav-item" onclick="mobileNav('assignments', this)">
+    <span class="nav-icon">📋</span>Phân công
+  </button>
+  <button class="bottom-nav-item" onclick="mobileNav('map', this)">
+    <span class="nav-icon">🗺️</span>Bản đồ
+  </button>
+  <button class="bottom-nav-item" onclick="mobileNav('checkins', this)">
+    <span class="nav-icon">📍</span>Check-in
+  </button>
+  <button class="bottom-nav-item" onclick="mobileNav('calls', this)">
+    <span class="nav-icon">📞</span>Gọi điện
+  </button>
+  <button class="bottom-nav-item" onclick="mobileNav('settings', this)">
+    <span class="nav-icon">⚙️</span>Cài đặt
+  </button>
+</nav>
+
+<!-- MODAL: SỬA NHÂN VIÊN -->
+<div id="modal-edit-user" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Sửa thông tin nhân viên</h2>
+      <button class="btn-close" onclick="closeModal('modal-edit-user')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-u-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Họ tên *</label>
+          <input type="text" id="edit-u-fullname" placeholder="Nguyễn Văn A">
+        </div>
+        <div class="form-group">
+          <label>Tài khoản</label>
+          <input type="text" id="edit-u-username" disabled style="opacity:.5">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Số điện thoại</label>
+          <input type="tel" id="edit-u-phone" placeholder="0xxx">
+        </div>
+        <div class="form-group">
+          <label>Vai trò</label>
+          <select id="edit-u-role">
+            <option value="sales">Nhân viên kinh doanh</option>
+            <option value="telesales">Telesales</option>
+            <option value="manager">Quản lý</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Mật khẩu mới <span style="color:var(--text2);font-weight:400">(để trống = không đổi)</span></label>
+        <input type="password" id="edit-u-password" placeholder="Nhập mật khẩu mới nếu muốn đổi">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-user')">Huỷ</button>
+      <button class="btn btn-primary" onclick="submitEditUser()">Lưu thay đổi</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: SỬA CỬA HÀNG -->
+<div id="modal-edit-store" class="modal hidden">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <h2>Sửa thông tin cửa hàng</h2>
+      <button class="btn-close" onclick="closeModal('modal-edit-store')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="es-id">
+      <div class="form-group">
+        <label>Loại cửa hàng *</label>
+        <select id="es-type">
+          <option value="new">Chưa mua hàng</option>
+          <option value="retail">Cửa hàng bán lẻ</option>
+          <option value="agent">Đại lý</option>
+          <option value="distributor">Nhà phân phối</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tên cửa hàng *</label>
+          <input type="text" id="es-name">
+        </div>
+        <div class="form-group">
+          <label>Mã cửa hàng</label>
+          <input type="text" id="es-code" disabled style="opacity:.5">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Chủ cửa hàng</label>
+          <input type="text" id="es-owner" placeholder="Tên chủ">
+        </div>
+        <div class="form-group">
+          <label>Số điện thoại</label>
+          <input type="tel" id="es-phone" placeholder="0xxx">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Địa chỉ (số nhà, đường)</label>
+        <input type="text" id="es-address" placeholder="VD: 123 Nguyễn Trãi">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Phường/Xã</label>
+          <input type="text" id="es-ward" placeholder="VD: Phường 1">
+        </div>
+        <div class="form-group">
+          <label>Quận/Huyện</label>
+          <input type="text" id="es-district" placeholder="VD: Quận 3">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Tỉnh/Thành phố</label>
+        <input type="text" id="es-province" placeholder="VD: TP.HCM">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Vĩ độ (Latitude)</label>
+          <input type="number" id="es-lat" placeholder="VD: 10.8231" step="any">
+        </div>
+        <div class="form-group">
+          <label>Kinh độ (Longitude)</label>
+          <input type="number" id="es-lon" placeholder="VD: 106.6297" step="any">
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text2)">
+        💡 Lấy tọa độ: Google Maps → click vị trí → copy số hiện ở dưới
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-store')">Huỷ</button>
+      <button class="btn btn-primary" onclick="submitEditStore()">Lưu thay đổi</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: TẠO CỬA HÀNG -->
+<div id="modal-create-store" class="modal hidden">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <h2>Thêm cửa hàng mới</h2>
+      <button class="btn-close" onclick="closeModal('modal-create-store')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Loại cửa hàng *</label>
+        <select id="cs-type" onchange="adminFetchAutoCode(this.value)">
+          <option value="new">Chưa mua hàng</option>
+          <option value="retail">Cửa hàng bán lẻ</option>
+          <option value="agent">Đại lý</option>
+          <option value="distributor">Nhà phân phối</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tên cửa hàng *</label>
+          <input type="text" id="cs-name" placeholder="Cửa hàng ABC"
+                 oninput="adminCheckStoreName(this.value)">
+          <div id="cs-name-msg" style="font-size:12px;margin-top:3px"></div>
+        </div>
+        <div class="form-group">
+          <label>Mã cửa hàng <span style="color:var(--text2);font-weight:400">(tự động)</span></label>
+          <input type="text" id="cs-code" placeholder="Tự động" data-auto-code="">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Chủ cửa hàng</label>
+          <input type="text" id="cs-owner" placeholder="Tên chủ">
+        </div>
+        <div class="form-group">
+          <label>Số điện thoại</label>
+          <input type="tel" id="cs-phone" placeholder="0xxx">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Địa chỉ</label>
+        <input type="text" id="cs-address" placeholder="Số nhà, đường">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Phường/Xã</label>
+          <input type="text" id="cs-ward" placeholder="VD: Phường 1">
+        </div>
+        <div class="form-group">
+          <label>Quận/Huyện</label>
+          <input type="text" id="cs-district" placeholder="VD: Quận 3">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Tỉnh/Thành phố</label>
+        <input type="text" id="cs-province" placeholder="VD: TP.HCM" value="TP.HCM">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Vĩ độ (Latitude)</label>
+          <input type="number" id="cs-lat" placeholder="VD: 10.8231" step="any">
+        </div>
+        <div class="form-group">
+          <label>Kinh độ (Longitude)</label>
+          <input type="number" id="cs-lon" placeholder="VD: 106.6297" step="any">
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-top:-8px">
+        💡 Lấy tọa độ: mở Google Maps → click vào vị trí → copy số ở dưới màn hình
+      </div>
+      <div class="form-group">
+        <label>Giao cho nhân viên</label>
+        <select id="cs-assign-user">
+          <option value="">Chưa giao (giao sau)</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-store')">Huỷ</button>
+      <button class="btn btn-primary" onclick="submitCreateStore()">Tạo cửa hàng</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: TẠO NHÂN VIÊN -->
+<div id="modal-create-user" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Tạo tài khoản nhân viên</h2>
+      <button class="btn-close" onclick="closeModal('modal-create-user')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Họ tên *</label>
+          <input type="text" id="u-fullname" placeholder="Nguyễn Văn A">
+        </div>
+        <div class="form-group">
+          <label>Tài khoản *</label>
+          <input type="text" id="u-username" placeholder="nguyenvana">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Mật khẩu *</label>
+          <input type="password" id="u-password" placeholder="Mật khẩu">
+        </div>
+        <div class="form-group">
+          <label>Vai trò *</label>
+          <select id="u-role">
+            <option value="sales">Nhân viên kinh doanh</option>
+            <option value="telesales">Telesales</option>
+            <option value="manager">Quản lý</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Số điện thoại</label>
+        <input type="tel" id="u-phone" placeholder="0xxx">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-user')">Huỷ</button>
+      <button class="btn btn-primary" onclick="submitCreateUser()">Tạo tài khoản</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: GIAO CỬA HÀNG -->
+<div id="modal-assign" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Giao cửa hàng cho nhân viên</h2>
+      <button class="btn-close" onclick="closeModal('modal-assign')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Nhân viên *</label>
+        <select id="assign-user"></select>
+      </div>
+      <div class="form-group">
+        <label>Cửa hàng *</label>
+        <select id="assign-store"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-assign')">Huỷ</button>
+      <button class="btn btn-primary" onclick="submitAssign()">Giao cửa hàng</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: XEM MÔ TẢ ĐẦY ĐỦ -->
+<div id="modal-desc" class="modal hidden">
+  <div class="modal-box" style="max-width:480px">
+    <div class="modal-header">
+      <h2>Mô tả chi tiết</h2>
+      <button class="btn-close" onclick="closeModal('modal-desc')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-desc-content" style="font-size:14px;line-height:1.7;white-space:pre-wrap;color:var(--text)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-desc')">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast hidden"></div>
+
+<script>
+
+// Theme - chay ngay khi load
+(function() {
+  const theme = localStorage.getItem('sf_theme') || 'dark';
+  if (theme === 'light') document.body.classList.add('light');
+})();
+
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('sf_theme', isLight ? 'light' : 'dark');
+  document.getElementById('theme-btn').textContent = isLight ? '☀️' : '🌙';
+}
+
+// ── CONFIG ──────────────────────────────
+const TOKEN = () => localStorage.getItem('sf_token');
+
+async function api(method, url, body = null) {
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Authorization': `Bearer ${TOKEN()}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: body ? JSON.stringify(body) : null,
+  });
+  if (res.status === 401) { doLogout(); return null; }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// ── AUTH ─────────────────────────────────
+function doLogout() {
+  localStorage.removeItem('sf_token');
+  localStorage.removeItem('sf_user');
+  window.location.href = '/login';
+}
+
+// ── ROUTING ─────────────────────────────
+const TITLES = {
+  dashboard: 'Dashboard',
+  employees: 'Quản lý nhân viên',
+  stores: 'Quản lý cửa hàng',
+  assignments: 'Phân công cửa hàng',
+  checkins: 'Lịch sử check-in',
+  calls:    'Lịch sử gọi điện',
+  settings: 'Cài đặt hệ thống',
+  map:      'Bản đồ khách hàng',
+};
+
+const PAGE_ACTIONS = {
+  employees:   () => `<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Nhân viên</button>`,
+  assignments: () => `<button class="btn btn-primary btn-sm" onclick="openAssign()">+ Giao</button>`,
+  stores:      () => `<button class="btn btn-primary btn-sm" onclick="openCreateStore()">+ Cửa hàng</button>`,
+  dashboard:   () => ``,
+  checkins:    () => ``,
+  calls:       () => ``,
+  settings:    () => ``,
+  map:         () => ``,
+};
+
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  if (btn) btn.classList.add('active');
+  document.getElementById('page-title').textContent = TITLES[name] || name;
+  document.getElementById('page-actions').innerHTML = (PAGE_ACTIONS[name] || (() => ''))();
+  loadPage(name);
+}
+
+// ── DATA ─────────────────────────────────
+let allEmployees = [], allStores = [], allAssignments = [], allCheckins = [];
+
+async function loadPage(name) {
+  if (name === 'dashboard')   await loadDashboard();
+  if (name === 'employees')   await loadEmployees();
+  if (name === 'stores')      await loadStores();
+  if (name === 'assignments') await loadAssignments();
+  if (name === 'checkins')    await loadCheckins();
+  if (name === 'calls')       await loadCalls();
+  if (name === 'settings')    await loadSettings();
+  if (name === 'map')         await loadAdminMap();
+}
+
+// DASHBOARD
+async function loadDashboard() {
+  const [stores, users, checkins] = await Promise.all([
+    api('GET', '/api/stores/'),
+    api('GET', '/api/auth/users'),
+    api('GET', '/api/checkin/history?limit=10'),
+  ]);
+
+  document.getElementById('stat-stores').textContent    = stores?.length || 0;
+  document.getElementById('stat-employees').textContent = users?.length  || 0;
+
+  const today = new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  const todayCheckins = checkins?.data?.filter(c => {
+    const d = new Date(c.checkin_at).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+    return d === today;
+  }) || [];
+  document.getElementById('stat-checkins-today').textContent = todayCheckins.length;
+
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const notVisited = stores?.filter(s => !s.last_checkin || !s.last_checkin.startsWith(thisMonth)) || [];
+  document.getElementById('stat-not-visited').textContent = notVisited.length;
+
+  renderRecentCheckins(checkins?.data || []);
+}
+
+function renderRecentCheckins(rows) {
+  document.getElementById('recent-checkins').innerHTML = rows.map(c => `
+    <tr class="checkin-row">
+      <td>${fmtDate(c.checkin_at)}</td>
+      <td>${c.user_name || '—'}</td>
+      <td>${c.store_name || '—'}</td>
+      ${descCell(c.description)}
+      <td style="display:flex;gap:2px;flex-wrap:wrap;align-items:center">${buildPhotosHtml(c)}</td>
+    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:24px">Chưa có dữ liệu</td></tr>';
+
+  // Mobile cards
+  const el = document.getElementById('recent-checkins-cards');
+  if (!el) return;
+  el.innerHTML = rows.map(c => {
+    const photosHtml = buildPhotosHtml(c);
+    return `<div class="m-card">
+      <div class="m-card-header">
+        <div>
+          <div class="m-card-title">${c.store_name || '—'}</div>
+          <div class="m-card-sub">${fmtDate(c.checkin_at)}</div>
+        </div>
+        ${c.duration_min ? `<span style="font-size:12px;color:var(--text2)">⏱ ${c.duration_min}p</span>` : ''}
+      </div>
+      <div class="m-card-row">👤 ${c.user_name || '—'}</div>
+      ${c.description ? `<div class="m-card-row" style="color:var(--text);font-size:12px;white-space:pre-wrap;word-break:break-word">${c.description}</div>` : ''}
+      ${photosHtml !== '—' ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${photosHtml}</div>` : ''}
+    </div>`;
+  }).join('') || '<div style="padding:16px;color:var(--text2);text-align:center;font-size:13px">Chưa có dữ liệu</div>';
+}
+
+// EMPLOYEES
+async function loadEmployees() {
+  allEmployees = await api('GET', '/api/auth/users') || [];
+  allAssignments = await api('GET', '/api/stores/assignments') || [];
+  renderEmployees(allEmployees);
+}
+
+function renderEmployees(rows) {
+  const tbody = document.getElementById('employees-table');
+  tbody.innerHTML = rows.map(u => {
+    const assigned = allAssignments.filter(a => a.user_id === u.id).length;
+    return `<tr>
+      <td><div style="font-weight:500">${u.full_name}</div></td>
+      <td style="color:var(--text2)">${u.username}</td>
+      <td><span class="badge badge-${u.role}">${roleLabel(u.role)}</span></td>
+      <td>${u.phone || '—'}</td>
+      <td>${assigned} cửa hàng</td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="openEditUser('${u.id}')">Sửa</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAssignForUser('${u.id}','${u.full_name}')">Giao cửa hàng</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}','${u.full_name}')">Xóa</button>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:24px">Chưa có nhân viên</td></tr>';
+  renderEmployeeCards(rows);
+}
+
+function filterEmployees(q) {
+  const lower = q.toLowerCase();
+  renderEmployees(allEmployees.filter(u =>
+    u.full_name.toLowerCase().includes(lower) || u.username.toLowerCase().includes(lower)
+  ));
+}
+
+// STORES
+let allFeatures_admin = [];
+
+async function loadStores() {
+  const [stores, assignments, geojson] = await Promise.all([
+    api('GET', '/api/stores/'),
+    api('GET', '/api/stores/assignments'),
+    api('GET', '/api/stores/geojson'),
+  ]);
+  allStores      = stores || [];
+  allAssignments = assignments || [];
+  allFeatures_admin = geojson?.features || [];
+  populateDistrictFilter();
+  renderStores(allStores);
+}
+
+let _storeTypeFilter = '';
+
+function populateDistrictFilter() {
+  const districts = [...new Set(allStores.map(s => s.district).filter(Boolean))].sort();
+  const sel = document.getElementById('store-filter-district');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Tất cả quận</option>' +
+    districts.map(d => `<option value="${d}" ${d===cur?'selected':''}>${d}</option>`).join('');
+}
+
+function onDistrictChange() {
+  const district = document.getElementById('store-filter-district').value;
+  const wards = [...new Set(allStores
+    .filter(s => !district || s.district === district)
+    .map(s => s.ward).filter(Boolean))].sort();
+  const sel = document.getElementById('store-filter-ward');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Tất cả phường</option>' +
+    wards.map(w => `<option value="${w}">${w}</option>`).join('');
+  applyStoreFilters();
+}
+
+function applyStoreFilters() {
+  const q        = (document.getElementById('store-search-q')?.value || '').toLowerCase();
+  const type     = document.getElementById('store-filter-type')?.value || '';
+  const district = document.getElementById('store-filter-district')?.value || '';
+  const ward     = document.getElementById('store-filter-ward')?.value || '';
+  const filtered = allStores.filter(s => {
+    if (q && !s.name?.toLowerCase().includes(q) && !s.code?.toLowerCase().includes(q)) return false;
+    if (type     && s.type     !== type)     return false;
+    if (district && s.district !== district) return false;
+    if (ward     && s.ward     !== ward)     return false;
+    return true;
+  });
+  renderStores(filtered);
+}
+
+// Giu lai cho backward compat
+function filterStoreType(t) { _storeTypeFilter = t; applyStoreFilters(); }
+function filterStores(q) { applyStoreFilters(); }
+
+function renderStores(rows) {
+  const filtered = _storeTypeFilter ? rows.filter(s => s.type === _storeTypeFilter) : rows;
+  const tbody = document.getElementById('stores-table');
+  tbody.innerHTML = filtered.map(s => {
+    const assignees = allAssignments.filter(a => a.store_id === s.id).map(a => a.user_name).join(', ');
+    const location = s.address || [s.ward, s.district, s.province].filter(Boolean).join(', ') || '—';
+    return `<tr>
+      <td style="color:var(--text2);font-size:12px">${s.code}</td>
+      <td>
+        <span class="store-dot" style="background:${s.color || '#fff'}"></span>
+        <span style="font-weight:500">${s.name}</span>
+      </td>
+      <td><span class="badge badge-${s.type}">${typeLabel(s.type)}</span></td>
+      <td style="color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${location}</td>
+      <td style="color:var(--text2)">${s.last_checkin ? fmtDateOnly(s.last_checkin) : '—'}</td>
+      <td style="color:var(--text2)">${s.last_call ? fmtDateOnly(s.last_call) : '—'}</td>
+      <td style="color:var(--text2)">${assignees || '<span style="color:var(--danger)">Chưa giao</span>'}</td>
+      <td style="display:flex;gap:4px">
+        <button class="btn btn-ghost btn-sm" onclick="openEditStore('${s.id}')">Sửa</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAssignForStore('${s.id}','${s.name}')">+ Giao</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteStore('${s.id}','${s.name}')">Xóa</button>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px">Chưa có cửa hàng</td></tr>';
+  renderStoreCards(filtered);
+}
+
+// ASSIGNMENTS
+async function loadAssignments() {
+  allAssignments = await api('GET', '/api/stores/assignments') || [];
+  if (!allStores.length) allStores = await api('GET', '/api/stores/') || [];
+
+  // Populate dropdown nhân viên
+  const sel = document.getElementById('assignment-filter-user');
+  if (sel) {
+    const users = [...new Map(allAssignments.map(a => [a.user_id, a.user_name])).entries()];
+    sel.innerHTML = '<option value="">Tất cả nhân viên</option>' +
+      users.map(([id, name]) => `<option value="${id}">${name}</option>`).join('');
+  }
+
+  renderAssignments(allAssignments);
+}
+
+function applyAssignmentFilter() {
+  const userId = document.getElementById('assignment-filter-user')?.value || '';
+  const type   = document.getElementById('assignment-filter-type')?.value || '';
+  const filtered = allAssignments.filter(a => {
+    if (userId && a.user_id !== userId) return false;
+    if (type) {
+      const store = allStores.find(s => s.id === a.store_id);
+      if (!store || store.type !== type) return false;
+    }
+    return true;
+  });
+  renderAssignments(filtered);
+}
+
+function renderAssignments(rows) {
+  const tbody = document.getElementById('assignments-table');
+  tbody.innerHTML = rows.map(a => {
+    const store = allStores.find(s => s.id === a.store_id);
+    const storeType = store?.type || '';
+    return `<tr>
+      <td style="font-weight:500">${a.user_name || '—'}</td>
+      <td>${a.store_name || '—'}</td>
+      <td style="color:var(--text2);font-size:12px">${a.store_code || '—'}</td>
+      <td>${storeType ? `<span class="badge badge-${storeType}">${typeLabel(storeType)}</span>` : '—'}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="removeAssignment('${a.id}')">Huỷ giao</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:24px">Chưa có phân công</td></tr>';
+
+  const el = document.getElementById('assignments-cards');
+  if (el) {
+    el.innerHTML = rows.map(a => {
+      const store = allStores.find(s => s.id === a.store_id);
+      const storeType = store?.type || '';
+      return `<div class="m-card">
+        <div class="m-card-header">
+          <div>
+            <div class="m-card-title">${a.store_name || '—'}</div>
+            <div class="m-card-sub">${a.store_code || '—'}</div>
+          </div>
+          ${storeType ? `<span class="badge badge-${storeType}">${typeLabel(storeType)}</span>` : ''}
+        </div>
+        <div class="m-card-row">👤 ${a.user_name || '—'}</div>
+        <div class="m-card-actions">
+          <button class="btn btn-danger btn-sm" onclick="removeAssignment('${a.id}')">Huỷ giao</button>
+        </div>
+      </div>`;
+    }).join('') || '<div style="padding:16px;color:var(--text2);text-align:center;font-size:13px">Không có kết quả</div>';
+  }
+}
+
+// CHECKINS
+async function loadCheckins() {
+  const res = await api('GET', '/api/checkin/history?limit=50') || { data: [] };
+  allCheckins = res.data;
+  renderCheckins(allCheckins);
+}
+
+function filterCheckins(q) {
+  const lower = q.toLowerCase();
+  renderCheckins(allCheckins.filter(c =>
+    c.user_name?.toLowerCase().includes(lower) ||
+    c.store_name?.toLowerCase().includes(lower)
+  ));
+}
+
+function buildPhotosHtml(c) {
+  const photos = [];
+  if (c.photo_url)  photos.push(c.photo_url);
+  if (c.photo2_url) photos.push(c.photo2_url);
+  if (c.photo_public_id) {
+    const extra = c.photo_public_id.split('|').filter(u => u && u !== c.photo2_url);
+    photos.push(...extra);
+  } else if (c.photo3_url && !photos.includes(c.photo3_url)) {
+    photos.push(c.photo3_url);
+  }
+  if (!photos.length) return '—';
+  return photos.map(url =>
+    `<img src="${url}" onclick="viewPhoto('${url}')"
+      style="width:40px;height:40px;object-fit:cover;border-radius:4px;cursor:zoom-in;border:1px solid var(--border);margin-right:4px" loading="lazy">`
+  ).join('');
+}
+
+function renderCheckins(rows) {
+  document.getElementById('checkins-table').innerHTML = rows.map(c => `
+    <tr>
+      <td style="color:var(--text2)">${fmtDate(c.checkin_at)}</td>
+      <td style="font-weight:500">${c.user_name || '—'}</td>
+      <td>${c.store_name || '—'}</td>
+      ${descCell(c.description)}
+      <td>${c.duration_min ? c.duration_min + ' phút' : '—'}</td>
+      <td style="display:flex;gap:2px;flex-wrap:wrap;align-items:center">${buildPhotosHtml(c)}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteCheckin('${c.id}')">Xóa</button></td>
+    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px">Chưa có dữ liệu</td></tr>';
+  renderCheckinCards(rows);
+}
+
+// ── MODALS ───────────────────────────────
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+function openCreateUser() {
+  ['u-fullname','u-username','u-password','u-phone'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('modal-create-user').classList.remove('hidden');
+}
+
+async function submitCreateUser() {
+  const fullname = document.getElementById('u-fullname').value.trim();
+  const username = document.getElementById('u-username').value.trim();
+  const password = document.getElementById('u-password').value;
+  const role     = document.getElementById('u-role').value;
+  const phone    = document.getElementById('u-phone').value.trim();
+  if (!fullname || !username || !password) { showToast('Cần nhập đầy đủ thông tin', 'error'); return; }
+  try {
+    await api('POST', '/api/auth/register', { full_name: fullname, username, password, role, phone });
+    closeModal('modal-create-user');
+    showToast(`Đã tạo tài khoản ${username}`, 'success');
+    loadEmployees();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function openAssign() {
+  await _populateAssignSelects(null, null);
+  document.getElementById('modal-assign').classList.remove('hidden');
+}
+
+async function openAssignForUser(userId, userName) {
+  await _populateAssignSelects(userId, null);
+  document.getElementById('modal-assign').classList.remove('hidden');
+}
+
+async function openAssignForStore(storeId, storeName) {
+  await _populateAssignSelects(null, storeId);
+  document.getElementById('modal-assign').classList.remove('hidden');
+}
+
+async function _populateAssignSelects(selectedUserId, selectedStoreId) {
+  if (!allEmployees.length) allEmployees = await api('GET', '/api/auth/users') || [];
+  if (!allStores.length)    allStores    = await api('GET', '/api/stores/')    || [];
+
+  const userSel  = document.getElementById('assign-user');
+  const storeSel = document.getElementById('assign-store');
+
+  userSel.innerHTML  = allEmployees.filter(u => u.role === 'sales')
+    .map(u => `<option value="${u.id}" ${u.id === selectedUserId ? 'selected' : ''}>${u.full_name} (${u.username})</option>`).join('');
+  storeSel.innerHTML = allStores
+    .map(s => `<option value="${s.id}" ${s.id === selectedStoreId ? 'selected' : ''}>${s.name} (${s.code})</option>`).join('');
+}
+
+async function submitAssign() {
+  const userId  = document.getElementById('assign-user').value;
+  const storeId = document.getElementById('assign-store').value;
+  if (!userId || !storeId) { showToast('Cần chọn nhân viên và cửa hàng', 'error'); return; }
+  try {
+    await api('POST', '/api/stores/assignments', { user_id: userId, store_id: storeId });
+    closeModal('modal-assign');
+    showToast('Đã giao cửa hàng thành công', 'success');
+    loadAssignments();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function removeAssignment(id) {
+  if (!confirm('Huỷ phân công này?')) return;
+  try {
+    await api('DELETE', `/api/stores/assignments/${id}`);
+    showToast('Đã huỷ phân công', 'success');
+    loadAssignments();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function viewPhoto(url) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:16px;';
+  overlay.onclick = () => overlay.remove();
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.cssText = 'max-width:100%;max-height:100vh;object-fit:contain;border-radius:8px;';
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
+}
+
+// ── HELPERS ──────────────────────────────
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('vi-VN', {
+    day:'2-digit', month:'2-digit', year:'numeric',
+    hour:'2-digit', minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'
+  });
+}
+function fmtDateOnly(iso) {
+  if (!iso) return '—';
+  const [y,m,d] = iso.split('T')[0].split('-');
+  return `${d}/${m}/${y}`;
+}
+function roleLabel(r) {
+  return { admin:'Admin', manager:'Quản lý', sales:'Nhân viên KD', telesales:'Telesales' }[r] || r;
+}
+function typeLabel(t) {
+  return { retail:'Cửa hàng', agent:'Đại lý', distributor:'Nhà PP', new:'Chưa mua' }[t] || t;
+}
+
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast ${type}`;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3500);
+}
+
+function adminViewPhoto(url) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:16px;';
+  overlay.onclick = () => overlay.remove();
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.cssText = 'max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;';
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
+}
+
+function descCell(text) {
+  if (!text || text === '—') return '<td style="color:var(--text2)">—</td>';
+  const short = text.length > 60 ? text.slice(0, 60) + '…' : text;
+  const id = 'desc_' + Math.random().toString(36).slice(2);
+  // Luu text vao hidden store de tranh escape issue
+  _descStore[id] = text;
+  return `<td style="max-width:220px">
+    <span style="color:var(--text)">${short}</span>
+    ${text.length > 60 ? `<button onclick="showDesc('${id}')" style="margin-left:4px;padding:1px 7px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--accent);font-size:11px;cursor:pointer;font-family:var(--font)">Xem</button>` : ''}
+  </td>`;
+}
+
+const _descStore = {};
+
+function showDesc(idOrText) {
+  // Ho tro ca id (tu descCell) lan text truc tiep
+  const text = _descStore[idOrText] || idOrText;
+  document.getElementById('modal-desc-content').textContent = text;
+  document.getElementById('modal-desc').classList.remove('hidden');
+}
+
+// ── ADMIN MAP ────────────────────────────
+let adminMap = null, adminMarkersLayer = null;
+let adminMapFeatures = [];
+let adminMapAssignments = [];
+let adminCheckinDays = 7;
+let adminCallDays = 7;
+
+const TYPE_CONFIG_ADMIN = {
+  new:         { color: '#FFFFFF' },
+  retail:      { color: '#22C55E' },
+  agent:       { color: '#EAB308' },
+  distributor: { color: '#EF4444' },
+};
+
+async function loadAdminMap() {
+  if (!adminMap) {
+    adminMap = L.map('admin-map', { center: [10.8231, 106.6297], zoom: 13 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap', maxZoom: 19
+    }).addTo(adminMap);
+    adminMarkersLayer = L.layerGroup().addTo(adminMap);
+  }
+  setTimeout(() => adminMap.invalidateSize(), 150);
+
+  // Load song song: geojson + assignments + activity days
+  try {
+    const [geojson, assignments, actRes] = await Promise.all([
+      api('GET', '/api/stores/geojson'),
+      api('GET', '/api/stores/assignments'),
+      api('GET', '/api/calls/activity-days'),
+    ]);
+    adminMapFeatures    = geojson?.features || [];
+    adminMapAssignments = assignments || [];
+    adminCheckinDays    = actRes?.checkin_activity_days || actRes?.activity_days || 7;
+    adminCallDays       = actRes?.call_activity_days    || actRes?.activity_days || 7;
+    renderAdminMarkers(adminMapFeatures);
+  } catch(e) { console.error('Admin map load error:', e); }
+}
+
+function onMapSearchInput(q) {
+  filterAdminMap();
+  const box = document.getElementById('map-suggestions');
+  const lower = q.trim().toLowerCase();
+
+  // Lay danh sach goi y (toi da 8)
+  const matches = adminMapFeatures.filter(f => {
+    const p = f.properties;
+    return !lower
+      || p.name?.toLowerCase().includes(lower)
+      || p.code?.toLowerCase().includes(lower);
+  }).slice(0, 8);
+
+  if (!matches.length) { box.style.display = 'none'; return; }
+
+  const TYPE_LABELS = { retail:'Cửa hàng', agent:'Đại lý', distributor:'Nhà PP', new:'Chưa mua' };
+  const TYPE_COLORS = { retail:'#22C55E', agent:'#EAB308', distributor:'#EF4444', new:'#9CA3AF' };
+
+  box.innerHTML = matches.map(f => {
+    const p = f.properties;
+    const color = TYPE_COLORS[p.type] || '#fff';
+    const label = TYPE_LABELS[p.type] || p.type;
+    // Highlight chu khop
+    const nameHl = lower ? p.name.replace(
+      new RegExp(`(${lower})`, 'gi'),
+      '<mark style="background:rgba(59,130,246,.3);color:var(--accent);border-radius:2px">$1</mark>'
+    ) : p.name;
+    return `<div onclick="selectMapStore('${p.id}')" style="
+      display:flex;align-items:center;gap:10px;
+      padding:10px 14px;cursor:pointer;
+      border-bottom:1px solid var(--border);
+      transition:background .1s;
+    " onmouseover="this.style.background='var(--surface2)'"
+       onmouseout="this.style.background=''"
+    >
+      <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;
+        ${p.type==='new'?'border:1.5px solid #666':''}"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500">${nameHl}</div>
+        <div style="font-size:11px;color:var(--text2)">${p.code} · ${label}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  box.style.display = 'block';
+}
+
+function hideMapSuggestions() {
+  const box = document.getElementById('map-suggestions');
+  if (box) box.style.display = 'none';
+}
+
+function selectMapStore(storeId) {
+  const feature = adminMapFeatures.find(f => f.properties.id === storeId);
+  if (!feature || !adminMap) return;
+
+  // Dong suggestions
+  hideMapSuggestions();
+  document.getElementById('map-search-input').value = feature.properties.name;
+  filterAdminMap();
+
+  // Fly to marker
+  const [lon, lat] = feature.geometry.coordinates;
+  adminMap.flyTo([lat, lon], 17, { animate: true, duration: 0.8 });
+
+  // Mo popup cua marker tuong ung
+  adminMarkersLayer.eachLayer(layer => {
+    if (layer._storeId === storeId || (layer.getLatLng &&
+        Math.abs(layer.getLatLng().lat - lat) < 0.0001 &&
+        Math.abs(layer.getLatLng().lng - lon) < 0.0001)) {
+      setTimeout(() => layer.openPopup(), 900);
+    }
+  });
+}
+
+
+function filterAdminMap() {
+  const q    = (document.getElementById('map-search-input')?.value || '').toLowerCase();
+  const type = document.getElementById('map-type-filter')?.value || '';
+  const act  = document.getElementById('map-activity-filter')?.value || '';
+
+  const filtered = adminMapFeatures.filter(f => {
+    const p = f.properties;
+    if (q && !p.name?.toLowerCase().includes(q) && !p.code?.toLowerCase().includes(q)) return false;
+    if (type && p.type !== type) return false;
+    if (act) {
+      const a = p.activity || 'none';
+      if (act === 'checkin') { if (a !== 'checkin' && a !== 'both') return false; }
+      else if (act === 'call') { if (a !== 'call' && a !== 'both') return false; }
+      else if (a !== act) return false;
+    }
+    return true;
+  });
+  renderAdminMarkers(filtered);
+}
+
+function renderAdminMarkers(features) {
+  if (!adminMarkersLayer) return;
+  adminMarkersLayer.clearLayers();
+
+  features.forEach(f => {
+    const p = f.properties;
+    if (!f.geometry?.coordinates) return;
+    const [lon, lat] = f.geometry.coordinates;
+    const color = TYPE_CONFIG_ADMIN[p.type]?.color || '#fff';
+    const act = p.activity || 'none';
+
+    // Build icon HTML
+    let html = '';
+    if (act === 'both') {
+      html = `<svg viewBox="0 0 24 24" width="26" height="26" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));cursor:pointer"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1.5"/></svg>`;
+    } else if (act === 'checkin') {
+      html = `<div style="position:relative;width:26px;height:36px;cursor:pointer"><div style="position:absolute;left:10px;bottom:0;width:3px;height:34px;background:#555;border-radius:2px"></div><div style="position:absolute;left:13px;top:0;width:13px;height:10px;background:${color};border:1.5px solid rgba(0,0,0,0.3);clip-path:polygon(0 0,100% 15%,100% 85%,0 100%);border-radius:1px"></div></div>`;
+    } else if (act === 'call') {
+      html = `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid rgba(0,0,0,0.25);box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;cursor:pointer"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="rgba(0,0,0,0.7)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.35 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 5.55 5.55l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>`;
+    } else {
+      const border = p.type === 'new' ? 'border:2px solid #888;' : 'border:3px solid rgba(0,0,0,0.25);';
+      html = `<div style="width:20px;height:20px;border-radius:50%;background:${color};${border}box-shadow:0 2px 6px rgba(0,0,0,.35);cursor:pointer"></div>`;
+    }
+
+    const sizes   = { both:[26,26], checkin:[26,36], call:[24,24], none:[20,20] };
+    const anchors = { both:[13,13], checkin:[10,36], call:[12,12], none:[10,10] };
+    const icon = L.divIcon({ className:'', html, iconSize: sizes[act], iconAnchor: anchors[act] });
+    const marker = L.marker([lat, lon], { icon });
+    marker._storeId = p.id;
+
+    // Assignees
+    const assignees = adminMapAssignments
+      .filter(a => a.store_id === p.id)
+      .map(a => a.user_name).join(', ') || '<span style="color:#ef4444">Chưa giao</span>';
+
+    // Activity label
+    const actLabel = {
+      none:    `<span style="color:#9ca3af">⚪ Chưa có hoạt động</span>`,
+      checkin: `<span style="color:#22c55e">🚩 Đã check-in</span>`,
+      call:    `<span style="color:#3b82f6">📞 Đã gọi điện</span>`,
+      both:    `<span style="color:#eab308">⭐ Check-in + Gọi điện</span>`,
+    }[act] || '';
+
+    // Expiry note — tinh ngay het han cu the
+    let expiryNote = '';
+    if (act !== 'none') {
+      // Tinh het han rieng cho tung loai, lay cai muon hon
+      const expiries = [];
+      if (p.last_checkin) {
+        const d = new Date(p.last_checkin);
+        d.setDate(d.getDate() + adminCheckinDays);
+        expiries.push(d);
+      }
+      if (p.last_call) {
+        const d = new Date(p.last_call);
+        d.setDate(d.getDate() + adminCallDays);
+        expiries.push(d);
+      }
+      if (expiries.length) {
+        const latest = new Date(Math.max(...expiries));
+        const expiryStr = latest.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'Asia/Ho_Chi_Minh' });
+        expiryNote = `<div style="font-size:11px;color:#f59e0b;margin-top:2px">⏳ Hết hạn: ${expiryStr}</div>`;
+      }
+    }
+
+    // Ngay goi dien cuoi + het han
+    const lastCallStr = p.last_call ? (() => {
+      const callDate = new Date(p.last_call);
+      const callExpiry = new Date(callDate);
+      callExpiry.setDate(callExpiry.getDate() + adminCallDays);
+      const callDateStr   = callDate.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'Asia/Ho_Chi_Minh' });
+      const callExpiryStr = callExpiry.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'Asia/Ho_Chi_Minh' });
+      return `<div style="font-size:12px;color:#6b7280;margin-top:4px">Gọi cuối: ${callDateStr} <span style="color:#f59e0b">(⏳${callExpiryStr})</span></div>`;
+    })() : '';
+
+    // Ngay check-in cuoi + het han
+    const lastCheckinStr = p.last_checkin ? (() => {
+      const ciDate = new Date(p.last_checkin);
+      const ciExpiry = new Date(ciDate);
+      ciExpiry.setDate(ciExpiry.getDate() + adminCheckinDays);
+      const ciDateStr   = ciDate.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'Asia/Ho_Chi_Minh' });
+      const ciExpiryStr = ciExpiry.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'Asia/Ho_Chi_Minh' });
+      return `<div style="font-size:12px;color:#6b7280;margin-top:4px">Check-in cuối: ${ciDateStr} <span style="color:#f59e0b">(⏳${ciExpiryStr})</span></div>`;
+    })() : `<div style="font-size:12px;color:#6b7280;margin-top:4px">Check-in cuối: —</div>`;
+
+    // Gom tat ca anh checkin gan nhat
+    const lastPhotos = [];
+    if (p.last_photo_url)  lastPhotos.push(p.last_photo_url);
+    if (p.last_photo2_url) lastPhotos.push(p.last_photo2_url);
+    if (p.last_photo_public_id) {
+      p.last_photo_public_id.split('|').filter(u => u).forEach(u => {
+        if (!lastPhotos.includes(u)) lastPhotos.push(u);
+      });
+    } else if (p.last_photo3_url && !lastPhotos.includes(p.last_photo3_url)) {
+      lastPhotos.push(p.last_photo3_url);
+    }
+    const photosSection = lastPhotos.length ? `
+      <div style="border-top:1px solid rgba(0,0,0,0.08);padding-top:8px">
+        <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
+          Ảnh check-in gần nhất (${lastPhotos.length})
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${lastPhotos.map(url => `<img src="${url}" onclick="adminViewPhoto('${url}')" style="width:56px;height:56px;object-fit:cover;border-radius:5px;cursor:zoom-in;border:1px solid rgba(0,0,0,0.12);flex-shrink:0" loading="lazy">`).join('')}
+        </div>
+      </div>` : '';
+
+    marker.bindPopup(`
+      <div style="font-family:'Be Vietnam Pro',sans-serif;min-width:220px;line-height:1.5">
+        <div style="font-weight:600;font-size:14px;margin-bottom:2px">${p.name}</div>
+        <div style="font-size:11px;color:#9ca3af;margin-bottom:8px">${p.code}</div>
+        <div style="font-size:12px;margin-bottom:4px">📍 ${p.address || '—'}</div>
+        <div style="font-size:12px;margin-bottom:8px">📞 ${p.phone || '—'}</div>
+        <div style="border-top:1px solid rgba(0,0,0,0.08);padding-top:8px;margin-bottom:6px">
+          <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Nhân viên phụ trách</div>
+          <div style="font-size:12px">${assignees}</div>
+        </div>
+        <div style="border-top:1px solid rgba(0,0,0,0.08);padding-top:8px;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Hoạt động gần đây</div>
+          <div style="font-size:12px">${actLabel}</div>
+          ${lastCallStr}
+          ${lastCheckinStr}
+        </div>
+        ${photosSection}
+      </div>
+    `, { maxWidth: 280 });
+
+    adminMarkersLayer.addLayer(marker);
+  });
+}
+
+// ── MOBILE CARDS ─────────────────────────
+function isMobile() { return window.innerWidth <= 768; }
+
+function renderEmployeeCards(rows) {
+  const el = document.getElementById('employees-cards');
+  if (!el) return;
+  el.innerHTML = rows.map(u => {
+    const assigned = allAssignments.filter(a => a.user_id === u.id).length;
+    return `<div class="m-card">
+      <div class="m-card-header">
+        <div>
+          <div class="m-card-title">${u.full_name}</div>
+          <div class="m-card-sub">${u.username}</div>
+        </div>
+        <span class="badge badge-${u.role}">${roleLabel(u.role)}</span>
+      </div>
+      <div class="m-card-row">📞 ${u.phone || '—'} &nbsp;·&nbsp; 🏪 ${assigned} cửa hàng</div>
+      <div class="m-card-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openEditUser('${u.id}')">Sửa</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAssignForUser('${u.id}','${u.full_name}')">Giao cửa hàng</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}','${u.full_name}')">Xóa</button>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:16px;color:var(--text2);text-align:center;font-size:13px">Chưa có nhân viên</div>';
+}
+
+function renderStoreCards(rows) {
+  const el = document.getElementById('stores-cards');
+  if (!el) return;
+  el.innerHTML = rows.map(s => {
+    const assignees = allAssignments.filter(a => a.store_id === s.id).map(a => a.user_name).join(', ');
+    return `<div class="m-card">
+      <div class="m-card-header">
+        <div style="flex:1;min-width:0">
+          <div class="m-card-title">
+            <span class="store-dot" style="background:${s.color||'#fff'}"></span>
+            ${s.name}
+          </div>
+          <div class="m-card-sub">${s.code}</div>
+        </div>
+        <span class="badge badge-${s.type}">${typeLabel(s.type)}</span>
+      </div>
+      <div class="m-card-row">📍 ${s.address || [s.ward,s.district,s.province].filter(Boolean).join(', ') || '—'}</div>
+      <div class="m-card-row">
+        👤 ${assignees || '<span style="color:var(--danger)">Chưa giao</span>'}
+      </div>
+      <div class="m-card-row">
+        🕐 CI: ${s.last_checkin ? fmtDateOnly(s.last_checkin) : '—'}
+        &nbsp;·&nbsp; 📞 Gọi: ${s.last_call ? fmtDateOnly(s.last_call) : '—'}
+      </div>
+      <div class="m-card-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openEditStore('${s.id}')">Sửa</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAssignForStore('${s.id}','${s.name}')">+ Giao</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteStore('${s.id}','${s.name}')">Xóa</button>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:16px;color:var(--text2);text-align:center;font-size:13px">Chưa có cửa hàng</div>';
+}
+
+function renderCheckinCards(rows) {
+  const el = document.getElementById('checkins-cards');
+  if (!el) return;
+  el.innerHTML = rows.map(c => {
+    const photosHtml = buildPhotosHtml(c);
+    return `<div class="m-card">
+      <div class="m-card-header">
+        <div>
+          <div class="m-card-title">${c.store_name || '—'}</div>
+          <div class="m-card-sub">${fmtDate(c.checkin_at)}</div>
+        </div>
+        ${c.duration_min ? `<span style="font-size:12px;color:var(--text2)">⏱ ${c.duration_min}p</span>` : ''}
+      </div>
+      <div class="m-card-row">👤 ${c.user_name || '—'}</div>
+      ${c.description ? `<div class="m-card-row" style="color:var(--text)">${c.description}</div>` : ''}
+      ${photosHtml !== '—' ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${photosHtml}</div>` : ''}
+      <div class="m-card-actions">
+        <button class="btn btn-danger btn-sm" onclick="deleteCheckin('${c.id}')">Xóa</button>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:16px;color:var(--text2);text-align:center;font-size:13px">Chưa có dữ liệu</div>';
+}
+
+function renderCallCards(rows) {
+  const el = document.getElementById('calls-cards');
+  if (!el) return;
+  el.innerHTML = rows.map(c => `
+    <div class="m-card">
+      <div class="m-card-header">
+        <div>
+          <div class="m-card-title">${c.store_name || '—'}</div>
+          <div class="m-card-sub">${fmtDate(c.called_at)}</div>
+        </div>
+      </div>
+      <div class="m-card-row">👤 ${c.user_name || '—'}</div>
+      ${c.note ? `<div class="m-card-row" style="color:var(--text);white-space:pre-wrap;word-break:break-word">${c.note}</div>` : ''}
+      <div class="m-card-actions">
+        <button class="btn btn-danger btn-sm" onclick="deleteCall('${c.id}')">Xóa</button>
+      </div>
+    </div>`).join('') || '<div style="padding:16px;color:var(--text2);text-align:center;font-size:13px">Chưa có dữ liệu</div>';
+}
+
+// Mobile bottom nav sync
+function mobileNav(name, btn) {
+  // Sync sidebar nav active state
+  const sidebarBtn = [...document.querySelectorAll('.nav-item')].find(
+    b => b.getAttribute('onclick')?.includes(`'${name}'`)
+  );
+  showPage(name, sidebarBtn || null);
+  // Update bottom nav active
+  document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// Sync bottom nav khi dung sidebar tren desktop
+const _origShowPage = showPage;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const token = localStorage.getItem('sf_token');
+  const user  = JSON.parse(localStorage.getItem('sf_user') || 'null');
+  if (!token || !user) { window.location.href = '/login'; return; }
+  if (user.role === 'sales') { window.location.href = '/'; return; }
+  if (user.role === 'telesales') { window.location.href = '/'; return; }
+
+  document.getElementById('admin-name').textContent = user.full_name;
+  document.getElementById('admin-role').textContent = roleLabel(user.role);
+
+  // Set theme icon
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = document.body.classList.contains('light') ? '☀️' : '🌙';
+
+  loadDashboard();
+});
+
+function openEditUser(userId) {
+  const user = allEmployees.find(u => u.id === userId);
+  if (!user) { showToast('Không tìm thấy nhân viên', 'error'); return; }
+  document.getElementById('edit-u-id').value       = user.id;
+  document.getElementById('edit-u-fullname').value = user.full_name;
+  document.getElementById('edit-u-username').value = user.username;
+  document.getElementById('edit-u-phone').value    = user.phone || '';
+  document.getElementById('edit-u-role').value     = user.role;
+  document.getElementById('edit-u-password').value = '';
+  document.getElementById('modal-edit-user').classList.remove('hidden');
+}
+
+async function submitEditUser() {
+  const id       = document.getElementById('edit-u-id').value;
+  const fullname = document.getElementById('edit-u-fullname').value.trim();
+  const phone    = document.getElementById('edit-u-phone').value.trim();
+  const role     = document.getElementById('edit-u-role').value;
+  const password = document.getElementById('edit-u-password').value;
+  if (!fullname) { showToast('Cần nhập họ tên', 'error'); return; }
+  const payload = { full_name: fullname, phone, role };
+  if (password) payload.password = password;
+  try {
+    await api('PUT', `/api/auth/users/${id}`, payload);
+    closeModal('modal-edit-user');
+    showToast('Đã cập nhật thông tin', 'success');
+    loadEmployees();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function deleteUser(userId, userName) {
+  if (!confirm(`Xóa tài khoản "${userName}"?\n\nNếu chưa có check-in → xóa hẳn khỏi DB.\nNếu đã có check-in → vô hiệu hoá tài khoản.`)) return;
+  try {
+    const res = await api('DELETE', `/api/auth/users/${userId}`);
+    showToast(res.message, 'success');
+    loadEmployees();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+let _nameCheckTimer2 = null;
+
+async function adminFetchAutoCode(storeType) {
+  try {
+    const res = await api('POST', '/api/stores/auto-code', { store_type: storeType });
+    const inp = document.getElementById('cs-code');
+    if (inp) { inp.placeholder = res.code; inp.dataset.autoCode = res.code; }
+  } catch {}
+}
+
+async function adminCheckStoreName(name) {
+  const msg = document.getElementById('cs-name-msg');
+  if (!name.trim()) { msg.textContent = ''; return; }
+  clearTimeout(_nameCheckTimer2);
+  _nameCheckTimer2 = setTimeout(async () => {
+    try {
+      const res = await api('POST', '/api/stores/check-name', { name });
+      if (res.duplicate) {
+        msg.textContent = `❌ Tên "${res.existing}" đã tồn tại`;
+        msg.style.color = 'var(--danger)';
+      } else {
+        msg.textContent = '✅ Tên hợp lệ';
+        msg.style.color = 'var(--success)';
+      }
+    } catch {}
+  }, 500);
+}
+
+async function openCreateStore() {
+  document.getElementById('cs-name').value     = '';
+  document.getElementById('cs-code').value     = '';
+  document.getElementById('cs-owner').value    = '';
+  document.getElementById('cs-phone').value    = '';
+  document.getElementById('cs-address').value  = '';
+  document.getElementById('cs-ward').value     = '';
+  document.getElementById('cs-district').value = '';
+  document.getElementById('cs-province').value = 'TP.HCM';
+  document.getElementById('cs-type').value     = 'new';
+  document.getElementById('cs-name-msg').textContent = '';
+  document.getElementById('cs-lat').value = '';
+  document.getElementById('cs-lon').value = '';
+  await adminFetchAutoCode('new');
+
+  // Populate nhan vien
+  if (!allEmployees.length) allEmployees = await api('GET', '/api/auth/users') || [];
+  const sel = document.getElementById('cs-assign-user');
+  sel.innerHTML = '<option value="">Chưa giao (giao sau)</option>' +
+    allEmployees.filter(u => u.role === 'sales')
+      .map(u => `<option value="${u.id}">${u.full_name} (${u.username})</option>`).join('');
+
+  document.getElementById('modal-create-store').classList.remove('hidden');
+}
+
+async function submitCreateStore() {
+  const name = document.getElementById('cs-name').value.trim();
+  const type = document.getElementById('cs-type').value;
+  if (!name) { showToast('Cần nhập tên cửa hàng', 'error'); return; }
+
+  // Check trung ten
+  try {
+    const check = await api('POST', '/api/stores/check-name', { name });
+    if (check.duplicate) { showToast(`Tên "${check.existing}" đã tồn tại`, 'error'); return; }
+  } catch {}
+
+  const manualCode = document.getElementById('cs-code').value.trim().toUpperCase();
+  const autoCode   = document.getElementById('cs-code').dataset.autoCode || '';
+
+  const lat = parseFloat(document.getElementById('cs-lat').value);
+  const lon = parseFloat(document.getElementById('cs-lon').value);
+  const payload = {
+    store_name:  name,
+    store_type:  type,
+    owner_name:  document.getElementById('cs-owner').value.trim(),
+    phone:       document.getElementById('cs-phone').value.trim(),
+    address:     document.getElementById('cs-address').value.trim(),
+    ward:        document.getElementById('cs-ward').value.trim(),
+    district:    document.getElementById('cs-district').value.trim(),
+    province:    document.getElementById('cs-province').value.trim(),
+    latitude:    isNaN(lat) ? null : lat,
+    longitude:   isNaN(lon) ? null : lon,
+  };
+  if (manualCode) payload.store_code = manualCode;
+
+  try {
+    const store = await api('POST', '/api/stores/', payload);
+    // Giao cho nhan vien neu chon
+    const assignUserId = document.getElementById('cs-assign-user').value;
+    if (assignUserId && store?.properties?.id) {
+      await api('POST', '/api/stores/assignments', {
+        user_id: assignUserId, store_id: store.properties.id
+      });
+    }
+    closeModal('modal-create-store');
+    showToast(`Đã tạo cửa hàng ${name}`, 'success');
+    loadStores();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function deleteStore(storeId, storeName) {
+  if (!confirm(`Xóa cửa hàng "${storeName}"?\nDữ liệu check-in liên quan sẽ bị xóa theo.`)) return;
+  try {
+    await api('DELETE', `/api/stores/${storeId}`);
+    showToast(`Đã xóa ${storeName}`, 'success');
+    loadStores();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function openEditStore(storeId) {
+  const store = allStores.find(s => s.id === storeId);
+  if (!store) { showToast('Không tìm thấy cửa hàng', 'error'); return; }
+
+  document.getElementById('es-id').value       = store.id;
+  document.getElementById('es-code').value     = store.code;
+  document.getElementById('es-name').value     = store.name;
+  document.getElementById('es-type').value     = store.type;
+  document.getElementById('es-owner').value    = store.owner  || '';
+  document.getElementById('es-phone').value    = store.phone  || '';
+  document.getElementById('es-ward').value     = store.ward   || '';
+  document.getElementById('es-district').value = store.district || '';
+  document.getElementById('es-province').value = store.province || '';
+
+  // Tach so nha khoi full_address de dien vao o address
+  // Vi address da duoc ghep san, can lay address goc tu store
+  // Lay phan dau cua address truoc ward
+  let rawAddr = store.address || '';
+  if (store.ward && rawAddr.includes(store.ward)) {
+    rawAddr = rawAddr.split(', ' + store.ward)[0];
+  } else if (store.district && rawAddr.includes(store.district)) {
+    rawAddr = rawAddr.split(', ' + store.district)[0];
+  }
+  document.getElementById('es-address').value = rawAddr;
+
+  // Lay lat/lon tu geometry neu co
+  const feature = allFeatures_admin?.find(f => f.properties?.id === storeId);
+  if (feature?.geometry?.coordinates) {
+    document.getElementById('es-lon').value = feature.geometry.coordinates[0] || '';
+    document.getElementById('es-lat').value = feature.geometry.coordinates[1] || '';
+  } else {
+    document.getElementById('es-lat').value = '';
+    document.getElementById('es-lon').value = '';
+  }
+
+  document.getElementById('modal-edit-store').classList.remove('hidden');
+}
+
+async function submitEditStore() {
+  const id   = document.getElementById('es-id').value;
+  const name = document.getElementById('es-name').value.trim();
+  if (!name) { showToast('Cần nhập tên cửa hàng', 'error'); return; }
+
+  const lat = parseFloat(document.getElementById('es-lat').value);
+  const lon = parseFloat(document.getElementById('es-lon').value);
+
+  const payload = {
+    store_name: name,
+    store_type: document.getElementById('es-type').value,
+    owner_name: document.getElementById('es-owner').value.trim(),
+    phone:      document.getElementById('es-phone').value.trim(),
+    address:    document.getElementById('es-address').value.trim(),
+    ward:       document.getElementById('es-ward').value.trim(),
+    district:   document.getElementById('es-district').value.trim(),
+    province:   document.getElementById('es-province').value.trim(),
+    latitude:   isNaN(lat) ? null : lat,
+    longitude:  isNaN(lon) ? null : lon,
+  };
+
+  try {
+    await api('PUT', `/api/stores/${id}`, payload);
+    closeModal('modal-edit-store');
+    showToast('Đã cập nhật cửa hàng', 'success');
+    loadStores();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function deleteCheckin(checkinId) {
+  if (!confirm('Xóa check-in này?')) return;
+  try {
+    await api('DELETE', `/api/checkin/${checkinId}`);
+    showToast('Đã xóa check-in', 'success');
+    loadCheckins();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function loadSettings() {
+  try {
+    const res  = await api('GET', '/api/session/settings');
+    const res2 = await api('GET', '/api/calls/activity-days');
+    document.getElementById('setting-min-minutes').value   = res.min_checkin_minutes;
+    document.getElementById('setting-checkin-days').value  = res2.checkin_activity_days || res2.activity_days || 7;
+    document.getElementById('setting-call-days').value     = res2.call_activity_days    || res2.activity_days || 7;
+  } catch {}
+}
+
+async function saveSettings() {
+  const minutes     = parseInt(document.getElementById('setting-min-minutes').value);
+  const checkinDays = parseInt(document.getElementById('setting-checkin-days').value);
+  const callDays    = parseInt(document.getElementById('setting-call-days').value);
+  if (!minutes || minutes < 1)     { showToast('Thời gian check-in không hợp lệ', 'error'); return; }
+  if (!checkinDays || checkinDays < 1) { showToast('Số ngày check-in không hợp lệ', 'error'); return; }
+  if (!callDays    || callDays    < 1) { showToast('Số ngày gọi điện không hợp lệ', 'error'); return; }
+  try {
+    await api('PUT', '/api/session/settings', { min_checkin_minutes: minutes });
+    await api('PUT', '/api/calls/activity-days', {
+      checkin_activity_days: checkinDays,
+      call_activity_days:    callDays,
+    });
+    showToast('Đã lưu cài đặt', 'success');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// CALLS
+let allCalls = [];
+
+async function loadCalls() {
+  const res = await api('GET', '/api/calls/history?limit=100') || { data: [] };
+  allCalls = res.data;
+  renderCalls(allCalls);
+}
+
+function filterCalls(q) {
+  const lower = q.toLowerCase();
+  renderCalls(allCalls.filter(c =>
+    c.user_name?.toLowerCase().includes(lower) ||
+    c.store_name?.toLowerCase().includes(lower)
+  ));
+}
+
+function renderCalls(rows) {
+  document.getElementById('calls-table').innerHTML = rows.map(c => `
+    <tr>
+      <td style="color:var(--text2)">${fmtDate(c.called_at)}</td>
+      <td style="font-weight:500">${c.user_name || '—'}</td>
+      <td>${c.store_name || '—'}</td>
+      ${descCell(c.note)}
+      <td><button class="btn btn-danger btn-sm" onclick="deleteCall('${c.id}')">Xóa</button></td>
+    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:24px">Chưa có dữ liệu</td></tr>';
+  renderCallCards(rows);
+}
+
+async function deleteCall(callId) {
+  if (!confirm('Xóa log cuộc gọi này?')) return;
+  try {
+    await api('DELETE', `/api/calls/${callId}`);
+    showToast('Đã xóa', 'success');
+    loadCalls();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</body>
+</html>

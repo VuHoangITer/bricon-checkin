@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Đăng nhập - Sales Field</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+  --border: rgba(255,255,255,0.08); --text: #e8eaf0; --text2: #8b90a0;
+  --accent: #3b82f6; --accent2: #2563eb; --danger: #ef4444;
+  --font: 'Be Vietnam Pro', sans-serif;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+body { display: flex; align-items: center; justify-content: center; }
+
+.login-wrap { width: 100%; max-width: 380px; padding: 24px; }
+
+.brand { text-align: center; margin-bottom: 32px; }
+.brand-logo {
+  width: 64px; height: 64px; border-radius: 16px;
+  background: var(--accent); color: #fff;
+  font-size: 26px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 12px;
+}
+.brand h1 { font-size: 24px; font-weight: 600; }
+.brand p { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 28px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group label { font-size: 12px; font-weight: 500; color: var(--text2); }
+.form-group input {
+  padding: 11px 14px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-family: var(--font); font-size: 14px;
+  outline: none; transition: border-color .2s;
+}
+.form-group input:focus { border-color: var(--accent); }
+
+.btn-login {
+  padding: 12px; border-radius: 8px;
+  background: var(--accent); color: #fff; border: none;
+  cursor: pointer; font-family: var(--font);
+  font-size: 15px; font-weight: 600; transition: background .2s;
+  margin-top: 4px;
+}
+.btn-login:hover { background: var(--accent2); }
+.btn-login:disabled { opacity: .6; cursor: not-allowed; }
+
+.error { color: var(--danger); font-size: 13px; text-align: center; min-height: 18px; }
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="brand">
+    <div class="brand-logo">SF</div>
+    <h1>Sales Field</h1>
+    <p>BRICON Việt Nam</p>
+  </div>
+
+  <div class="card">
+    <div class="form-group">
+      <label>Tài khoản</label>
+      <input type="text" id="username" placeholder="Nhập tài khoản" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Mật khẩu</label>
+      <input type="password" id="password" placeholder="Nhập mật khẩu" autocomplete="current-password">
+    </div>
+    <div class="error" id="error-msg"></div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Đăng nhập</button>
+  </div>
+</div>
+
+<script>
+async function doLogin() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const errEl    = document.getElementById('error-msg');
+  const btn      = document.getElementById('btn-login');
+  errEl.textContent = '';
+
+  if (!username || !password) {
+    errEl.textContent = 'Vui lòng nhập đầy đủ thông tin';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Đang đăng nhập...';
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Đăng nhập thất bại');
+
+    localStorage.setItem('sf_token', data.access_token);
+    localStorage.setItem('sf_user', JSON.stringify(data.user));
+
+    // Redirect theo role
+    if (data.user.role === 'admin' || data.user.role === 'manager') {
+      window.location.href = '/admin';
+    } else {
+      window.location.href = '/';
+    }
+  } catch (e) {
+    errEl.textContent = e.message;
+    btn.disabled = false;
+    btn.textContent = 'Đăng nhập';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Neu da login roi thi redirect luon
+  const token = localStorage.getItem('sf_token');
+  const user  = JSON.parse(localStorage.getItem('sf_user') || 'null');
+  if (token && user) {
+    window.location.href = (user.role === 'admin' || user.role === 'manager') ? '/admin' : '/';
+    return;
+  }
+  document.getElementById('password').addEventListener('keyup', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+});
+</script>
+</body>
+</html>

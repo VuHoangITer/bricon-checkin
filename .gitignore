@@ -1,0 +1,50 @@
+# ===== BẢO MẬT - TUYỆT ĐỐI KHÔNG COMMIT =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets.json
+service_account*.json
+
+# ===== PYTHON =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ===== DATABASE =====
+*.db
+*.sqlite
+*.sqlite3
+db
+
+# ===== LOGS =====
+logs/
+*.log
+
+# ===== HỆ ĐIỀU HÀNH =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== MIGRATIONS BYTECODE =====
+migrations/versions/__pycache__/

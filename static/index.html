@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sales Field">
+<meta name="theme-color" content="#3b82f6">
+<title>Sales Field</title>
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- MAIN APP -->
+<div id="app" class="app">
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="btn-icon" onclick="toggleSidebar()">☰</button>
+      <span class="topbar-title">Sales Field</span>
+    </div>
+    <div class="topbar-right">
+      <span id="user-badge" class="user-badge"></span>
+      <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Chuyển giao diện">🌙</button>
+      <button class="btn-icon" onclick="doLogout()" title="Đăng xuất">⏻</button>
+    </div>
+  </header>
+
+  <div class="app-body">
+
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Lọc theo loại</div>
+        <div class="filter-pills">
+          <button class="pill active" data-type="all" onclick="filterType(this)">Tất cả</button>
+          <button class="pill" data-type="retail" onclick="filterType(this)">
+            <span class="dot" style="background:#22C55E"></span> Cửa hàng
+          </button>
+          <button class="pill" data-type="agent" onclick="filterType(this)">
+            <span class="dot" style="background:#EAB308"></span> Đại lý
+          </button>
+          <button class="pill" data-type="distributor" onclick="filterType(this)">
+            <span class="dot" style="background:#EF4444"></span> Nhà PP
+          </button>
+          <button class="pill" data-type="new" onclick="filterType(this)">
+            <span class="dot" style="background:#fff;border:1.5px solid #888"></span> Chưa mua
+          </button>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <input class="sidebar-search" id="store-search" type="search"
+               placeholder="Tìm cửa hàng..." oninput="searchStores(this.value)">
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Cửa hàng của bạn</div>
+        <div id="store-list" class="store-list"></div>
+      </div>
+      <div class="sidebar-footer">
+        <button class="btn-add-store" onclick="openAddStoreModal()">+ Thêm cửa hàng mới</button>
+      </div>
+    </aside>
+
+    <main class="map-wrap">
+      <div id="map" style="position:absolute;inset:0;"></div>
+      <button id="fab-checkin" class="fab hidden" onclick="openCheckinModal()">📍 Check-in</button>
+      <div class="stats-bar">
+        <div class="stat"><span id="stat-total">0</span><small>Tổng</small></div>
+        <div class="stat"><span id="stat-today">0</span><small>Hôm nay</small></div>
+        <div class="stat"><span id="stat-pending">0</span><small>Chưa ghé</small></div>
+      </div>
+    </main>
+
+  </div>
+</div>
+
+<!-- MODAL: BẮT ĐẦU CHECK-IN -->
+<div id="modal-checkin-start" class="modal hidden">
+  <div class="modal-box" style="max-width:360px">
+    <div class="modal-header">
+      <h2 id="ci-store-name">Check-in</h2>
+      <button class="btn-close" onclick="closeModal('modal-checkin-start')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="ci-gps-status" class="gps-status">📡 Sẽ lấy GPS khi xác nhận...</div>
+      <div style="font-size:12px;color:var(--text2);background:var(--surface2);padding:10px;border-radius:8px">
+        ℹ️ Sau khi check-in, bạn cần chụp <strong>3 ảnh</strong> và ở lại tối thiểu <strong id="ci-min-time">15 phút</strong> trước khi check-out.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-checkin-start')">Huỷ</button>
+      <button class="btn-primary" id="btn-start-checkin" onclick="confirmStartCheckin()">📍 Bắt đầu Check-in</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD STORE -->
+<div id="modal-add-store" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Thêm cửa hàng mới</h2>
+      <button class="btn-close" onclick="closeModal('modal-add-store')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="form-group">
+        <label>Loại cửa hàng *</label>
+        <select id="new-store-type" onchange="onStoreTypeChange(this)">
+          <option value="new">Chưa mua hàng</option>
+          <option value="retail">Cửa hàng bán lẻ</option>
+          <option value="agent">Đại lý</option>
+          <option value="distributor">Nhà phân phối</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Tên cửa hàng *</label>
+        <input type="text" id="new-store-name" placeholder="VD: Cửa hàng Minh Tâm"
+               oninput="onStoreNameInput(this)">
+        <div id="name-check-msg" style="font-size:12px;margin-top:4px;"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Mã cửa hàng <span style="color:var(--text2);font-weight:400">(để trống = tự động)</span></label>
+        <input type="text" id="new-store-code" placeholder="Tự động" data-auto-code="">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Chủ cửa hàng</label>
+          <input type="text" id="new-store-owner" placeholder="Tên chủ">
+        </div>
+        <div class="form-group">
+          <label>Số điện thoại</label>
+          <input type="tel" id="new-store-phone" placeholder="0xxx">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Địa chỉ (số nhà, tên đường)</label>
+        <input type="text" id="new-store-address" placeholder="VD: 123 Nguyễn Trãi">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Phường/Xã</label>
+          <input type="text" id="new-store-ward" placeholder="VD: Phường 1">
+        </div>
+        <div class="form-group">
+          <label>Quận/Huyện</label>
+          <input type="text" id="new-store-district" placeholder="VD: Quận 3">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Tỉnh/Thành phố</label>
+        <input type="text" id="new-store-province" placeholder="VD: TP.HCM" value="TP.HCM">
+      </div>
+
+      <div class="form-group">
+        <label>Vị trí GPS</label>
+        <div id="new-store-gps" class="gps-status">📡 Chưa lấy GPS</div>
+        <button class="btn-ghost btn-sm" onclick="captureGpsForNewStore()" style="margin-top:4px">
+          📍 Lấy vị trí hiện tại
+        </button>
+        <input type="hidden" id="new-store-lat">
+        <input type="hidden" id="new-store-lon">
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-add-store')">Huỷ</button>
+      <button class="btn-primary" onclick="submitNewStore()">Tạo cửa hàng</button>
+    </div>
+  </div>
+</div>
+
+<!-- STORE DETAIL BOTTOM SHEET -->
+<div id="store-sheet" class="bottom-sheet hidden">
+  <div class="sheet-handle"></div>
+  <div class="sheet-content">
+    <div class="sheet-header">
+      <div>
+        <div class="sheet-type-badge" id="sheet-type-badge">—</div>
+        <h3 id="sheet-name">—</h3>
+        <p id="sheet-code" class="sheet-meta">—</p>
+      </div>
+      <button class="btn-close" onclick="closeSheet()">✕</button>
+    </div>
+    <div class="sheet-info">
+      <div class="info-row"><span>📍</span><span id="sheet-address">—</span></div>
+      <div class="info-row"><span>👤</span><span id="sheet-owner">—</span></div>
+      <div class="info-row"><span>📞</span><span id="sheet-phone">—</span></div>
+      <div class="info-row"><span>🕐</span><span id="sheet-last-checkin">—</span></div>
+      <!-- Trang thai cham soc: can check-in lai / can goi lai -->
+      <div id="sheet-care-status" style="display:flex;flex-direction:column;gap:5px;margin-top:6px;padding:10px 12px;background:var(--surface2);border-radius:8px"></div>
+      <div class="info-row" id="sheet-coords-row">
+        <span>🧭</span>
+        <span id="sheet-coords" style="font-size:12px;color:var(--text2);font-family:monospace">—</span>
+        <button id="sheet-gmap-btn" class="btn-gmap" title="Chỉ đường Google Maps">
+          🗺️ Chỉ đường
+        </button>
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button id="sheet-btn-checkin" class="btn-primary w-full" onclick="startCheckinFromSheet()">Check-in ngay</button>
+      <button id="sheet-btn-call" class="btn-call w-full" style="margin-top:8px" onclick="openCallModal()">Gọi điện</button>
+      <button class="btn-ghost w-full" style="margin-top:8px" onclick="openChangeTypeModal()">Đổi loại cửa hàng</button>
+    </div>
+    <div id="sheet-history" class="sheet-history"></div>
+  </div>
+</div>
+
+
+<!-- MODAL: GỌI ĐIỆN -->
+<div id="modal-call" class="modal hidden">
+  <div class="modal-box" style="max-width:360px">
+    <div class="modal-header">
+      <h2 id="call-store-name">Gọi điện</h2>
+      <button class="btn-close" onclick="closeModal('modal-call')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="text-align:center;padding:8px 0">
+        <div style="font-size:28px">📞</div>
+        <div id="call-phone-display" style="font-size:20px;font-weight:600;margin:8px 0;color:var(--accent)">—</div>
+        <a id="call-tel-link" href="#" style="display:inline-block;padding:10px 24px;background:var(--success);color:#fff;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin-bottom:8px">
+          📞 Gọi ngay
+        </a>
+      </div>
+      <div class="form-group" style="margin-top:8px">
+        <label>Ghi chú sau cuộc gọi <span style="color:var(--text2);font-weight:400">(tuỳ chọn)</span></label>
+        <textarea id="call-note" rows="2" placeholder="VD: Đã tư vấn sản phẩm, hẹn gặp tuần sau..."
+          style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--font);font-size:14px;outline:none;resize:none;width:100%"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-call')">Huỷ</button>
+      <button class="btn-primary" onclick="submitCallLog()">✅ Xác nhận đã gọi</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CHANGE STORE TYPE -->
+<div id="modal-change-type" class="modal hidden">
+  <div class="modal-box" style="max-width:360px">
+    <div class="modal-header">
+      <h2>Đổi loại cửa hàng</h2>
+      <button class="btn-close" onclick="closeModal('modal-change-type')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Loại hiện tại</label>
+        <div id="change-type-current" style="padding:8px 0;color:var(--text2);font-size:14px;"></div>
+      </div>
+      <div class="form-group">
+        <label>Đổi sang</label>
+        <select id="change-type-select">
+          <option value="new">Chưa mua hàng (trắng)</option>
+          <option value="retail">Cửa hàng bán lẻ (xanh)</option>
+          <option value="agent">Đại lý (vàng)</option>
+          <option value="distributor">Nhà phân phối (đỏ)</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-change-type')">Huỷ</button>
+      <button class="btn-primary" onclick="submitChangeType()">Cập nhật</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- WORKING SCREEN -->
+<div id="working-screen" class="hidden" style="
+  position:fixed;inset:0;z-index:850;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  overflow-y:auto;
+">
+  <!-- Header -->
+  <div style="background:var(--surface);padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">
+    <div style="flex:1">
+      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Đang làm việc tại</div>
+      <div id="working-store-name" style="font-size:16px;font-weight:600;margin-top:2px">—</div>
+    </div>
+    <div style="text-align:right">
+      <div id="working-timer" style="font-size:24px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums">0 phút</div>
+      <div id="checkout-hint" style="font-size:11px;color:var(--text2)">Đang tính...</div>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div style="height:4px;background:var(--surface2)">
+    <div id="timer-progress" style="height:100%;background:var(--accent);width:0%;transition:width 1s;border-radius:0 2px 2px 0"></div>
+  </div>
+
+  <!-- Content -->
+  <div style="padding:16px;flex:1;display:flex;flex-direction:column;gap:16px">
+
+    <!-- 3 anh -->
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+        Ảnh báo cáo <span style="color:var(--danger)">* bắt buộc</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div id="photo-slot-1" onclick="triggerPhotoSlot(1)" style="border:1.5px dashed var(--border);border-radius:8px;min-height:90px;cursor:pointer;overflow:hidden;background:var(--surface2)"></div>
+          <div style="font-size:10px;color:var(--text2);text-align:center">Bảng hiệu <span style="color:var(--danger)">*</span></div>
+          <input type="file" id="photo-input-1" accept="image/*" style="display:none" onchange="handlePhotoSlot(this,1)">
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div id="photo-slot-2" onclick="triggerPhotoSlot(2)" style="border:1.5px dashed var(--border);border-radius:8px;min-height:90px;cursor:pointer;overflow:hidden;background:var(--surface2)"></div>
+          <div style="font-size:10px;color:var(--text2);text-align:center">SP BRICON</div>
+          <input type="file" id="photo-input-2" accept="image/*" style="display:none" onchange="handlePhotoSlot(this,2)">
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div id="photo-slot-3-container" style="min-height:70px"></div>
+          <div style="font-size:10px;color:var(--text2);text-align:center">Đối thủ <span style="color:var(--danger)">*</span> <span style="color:var(--text2)">(tối đa 5)</span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Ghi chu -->
+    <div class="form-group">
+      <label>Ghi chú công việc</label>
+      <textarea id="working-note" rows="3" placeholder="Nhập nội dung làm việc tại đây..."
+                oninput="onNoteChange(this.value)"
+                style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--font);font-size:14px;outline:none;resize:vertical;width:100%"></textarea>
+    </div>
+
+  </div>
+
+  <!-- Footer actions -->
+  <div style="padding:16px;border-top:1px solid var(--border);display:flex;gap:10px;flex-shrink:0;background:var(--surface)">
+    <button onclick="cancelSession()" style="padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font);font-size:13px">
+      Huỷ check-in
+    </button>
+    <button id="btn-checkout" onclick="doCheckout()" style="flex:1;padding:12px;border-radius:8px;background:var(--warn);color:#fff;border:none;cursor:pointer;font-family:var(--font);font-size:15px;font-weight:600;opacity:.7;transition:all .3s">
+      ✅ Check-out
+    </button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast hidden"></div>
+
+
+<script>
+// Theme toggle - chay truoc khi render de tranh flash
+(function() {
+  const theme = localStorage.getItem('sf_theme') || 'dark';
+  if (theme === 'light') document.body.classList.add('light');
+})();
+
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('sf_theme', isLight ? 'light' : 'dark');
+  document.getElementById('theme-btn').textContent = isLight ? '☀️' : '🌙';
+}
+
+// Set icon dung khi load
+document.addEventListener('DOMContentLoaded', () => {
+  const isLight = document.body.classList.contains('light');
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+});
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/api.js"></script>
+<script src="js/map.js"></script>
+<script src="js/session.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js')
+    .catch(err => console.log('SW error:', err));
+}
+</script>
+</body>
+</html>
