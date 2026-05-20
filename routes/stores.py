@@ -213,11 +213,6 @@ def create_store():
 
     db = SessionLocal()
     try:
-        # Kiem tra trung ten
-        dup = db.query(Store).filter(Store.store_name.ilike(store_name)).first()
-        if dup:
-            return jsonify({"error": f"Tên '{dup.store_name}' đã tồn tại (mã {dup.store_code})"}), 409
-
         # Auto ma neu chua co
         store_code = (data.get("store_code") or "").strip().upper()
         if not store_code:

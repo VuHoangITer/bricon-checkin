@@ -933,9 +933,7 @@ body.light .toast { background: #ffffff; }
       <div class="form-row">
         <div class="form-group">
           <label>Tên cửa hàng *</label>
-          <input type="text" id="cs-name" placeholder="Cửa hàng ABC"
-                 oninput="adminCheckStoreName(this.value)">
-          <div id="cs-name-msg" style="font-size:12px;margin-top:3px"></div>
+          <input type="text" id="cs-name" placeholder="Cửa hàng ABC">
         </div>
         <div class="form-group">
           <label>Mã cửa hàng <span style="color:var(--text2);font-weight:400">(tự động)</span></label>
@@ -2099,11 +2097,7 @@ async function submitCreateStore() {
   const type = document.getElementById('cs-type').value;
   if (!name) { showToast('Cần nhập tên cửa hàng', 'error'); return; }
 
-  // Check trung ten
-  try {
-    const check = await api('POST', '/api/stores/check-name', { name });
-    if (check.duplicate) { showToast(`Tên "${check.existing}" đã tồn tại`, 'error'); return; }
-  } catch {}
+
 
   const manualCode = document.getElementById('cs-code').value.trim().toUpperCase();
   const autoCode   = document.getElementById('cs-code').dataset.autoCode || '';
