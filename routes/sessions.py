@@ -36,8 +36,32 @@ def _get_min_minutes(db) -> int:
 
 
 def _save_photo(file_storage, prefix: str) -> str:
+    """Upload lên Cloudinary nếu có config, fallback local."""
+    import config as _config
+    if _config.CLOUDINARY_CLOUD_NAME and _config.CLOUDINARY_CLOUD_NAME != "your_cloud_name":
+        try:
+            import cloudinary.uploader
+            cloudinary.config(
+                cloud_name  = _config.CLOUDINARY_CLOUD_NAME,
+                api_key     = _config.CLOUDINARY_API_KEY,
+                api_secret  = _config.CLOUDINARY_API_SECRET,
+                secure      = True,
+            )
+            # Lấy store_code từ prefix: s1_4c7924 → folder salesfield/4c7924
+            folder = f"salesfield/{prefix.split('_')[1][:6]}"
+            result = cloudinary.uploader.upload(
+                file_storage.stream,
+                folder         = folder,
+                transformation = [{"width": 1280, "height": 960,
+                                   "crop": "limit", "quality": "auto:good"}],
+            )
+            return result["secure_url"]
+        except Exception as e:
+            print(f"Cloudinary upload lỗi, fallback local: {e}")
+
+    # Fallback: lưu local
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    ext = (file_storage.filename.rsplit(".",1)[-1] or "jpg").lower()
+    ext = (file_storage.filename.rsplit(".", 1)[-1] or "jpg").lower()
     if ext not in ALLOWED: ext = "jpg"
     fname = f"{prefix}_{uuid.uuid4().hex[:8]}.{ext}"
     file_storage.save(os.path.join(UPLOAD_DIR, fname))
