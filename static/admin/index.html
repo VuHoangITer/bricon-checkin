@@ -366,6 +366,9 @@ body.light .toast { background: #ffffff; }
       <button class="nav-item" onclick="showPage('location-logs', this)">
         <span class="nav-icon">📌</span> Lịch sử vị trí
       </button>
+      <button class="nav-item" onclick="showPage('gallery', this)">
+        <span class="nav-icon">📷</span> Thư viện ảnh
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -664,6 +667,37 @@ body.light .toast { background: #ffffff; }
         </div>
       </div>
 
+      <!-- GALLERY PAGE -->
+      <div class="page" id="page-gallery">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:flex-end">
+          <div class="form-group" style="flex:1;min-width:160px">
+            <label>Lọc theo thư mục (cửa hàng)</label>
+            <select class="search-input" id="gallery-filter-folder" onchange="applyGalleryFilter()">
+              <option value="">Tất cả</option>
+            </select>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="clearGalleryFilter()" style="align-self:flex-end;margin-bottom:5px">Xoá lọc</button>
+          <button class="btn btn-primary btn-sm" onclick="loadMoreGallery()" id="btn-load-more" style="align-self:flex-end;margin-bottom:5px;display:none">Tải thêm</button>
+        </div>
+
+        <div id="gallery-stats" style="font-size:12px;color:var(--text2);margin-bottom:12px"></div>
+
+        <div id="gallery-grid" style="
+          display:grid;
+          grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+          gap:8px;
+        "></div>
+
+        <div id="gallery-empty" class="hidden"
+          style="text-align:center;padding:48px;color:var(--text2)">
+          Không có ảnh nào trên Cloudinary
+        </div>
+        <div id="gallery-loading"
+          style="text-align:center;padding:48px;color:var(--text2)">
+          ⏳ Đang tải từ Cloudinary...
+        </div>
+      </div>
+
       <!-- MAP PAGE -->
       <div class="page" id="page-map">
         <div class="map-page-wrap">
@@ -750,6 +784,9 @@ body.light .toast { background: #ffffff; }
   </button>
   <button class="bottom-nav-item" onclick="mobileNav('settings', this)">
     <span class="nav-icon">⚙️</span>Cài đặt
+  </button>
+  <button class="bottom-nav-item" onclick="mobileNav('gallery', this)">
+    <span class="nav-icon">📷</span>Ảnh
   </button>
 </nav>
 
@@ -1097,6 +1134,7 @@ const TITLES = {
   settings: 'Cài đặt hệ thống',
   map:      'Bản đồ khách hàng',
   'location-logs': '📌 Lịch sử thay đổi vị trí',
+  'gallery':        '📷 Thư viện ảnh check-in',
 };
 
 const PAGE_ACTIONS = {
@@ -1109,6 +1147,7 @@ const PAGE_ACTIONS = {
   settings:        () => ``,
   map:             () => ``,
   'location-logs': () => ``,
+  'gallery':        () => ``,
 };
 
 function showPage(name, btn) {
@@ -1134,6 +1173,7 @@ async function loadPage(name) {
   if (name === 'settings')       await loadSettings();
   if (name === 'map')            await loadAdminMap();
   if (name === 'location-logs')  await loadLocationLogs();
+  if (name === 'gallery')        await loadGallery();
 }
 
 // DASHBOARD
@@ -2358,6 +2398,127 @@ function renderLocationLogs(rows) {
       </div>
     </div>`).join('') ||
     '<div style="padding:16px;color:var(--text2);text-align:center;font-size:13px">Chưa có dữ liệu</div>';
+}
+
+// ── GALLERY (Cloudinary) ─────────────────────────────────────
+let _galleryPhotos    = [];   // tất cả ảnh đã load
+let _galleryFiltered  = [];   // sau khi filter
+let _galleryNextCursor = null;
+let _galleryFolders   = new Set();
+
+async function loadGallery() {
+  _galleryPhotos     = [];
+  _galleryNextCursor = null;
+  _galleryFolders    = new Set();
+  document.getElementById('gallery-grid').innerHTML    = '';
+  document.getElementById('gallery-loading').style.display = '';
+  document.getElementById('gallery-empty').classList.add('hidden');
+  document.getElementById('btn-load-more').style.display = 'none';
+
+  await _fetchGalleryPage();
+}
+
+async function _fetchGalleryPage() {
+  try {
+    let url = '/api/stores/cloudinary-photos?max_results=50';
+    if (_galleryNextCursor) url += `&next_cursor=${encodeURIComponent(_galleryNextCursor)}`;
+
+    const res = await api('GET', url);
+    if (!res) return;
+
+    _galleryPhotos.push(...(res.photos || []));
+    _galleryNextCursor = res.next_cursor || null;
+
+    // Thu thập folders
+    res.photos?.forEach(p => _galleryFolders.add(p.folder));
+    _populateGalleryFolderDropdown();
+
+    applyGalleryFilter();
+
+    // Hiện nút "Tải thêm" nếu còn
+    const btnMore = document.getElementById('btn-load-more');
+    btnMore.style.display = _galleryNextCursor ? '' : 'none';
+
+  } catch(e) {
+    showToast('Lỗi tải ảnh Cloudinary: ' + e.message, 'error');
+  } finally {
+    document.getElementById('gallery-loading').style.display = 'none';
+  }
+}
+
+async function loadMoreGallery() {
+  if (!_galleryNextCursor) return;
+  document.getElementById('gallery-loading').style.display = '';
+  await _fetchGalleryPage();
+}
+
+function _populateGalleryFolderDropdown() {
+  const sel = document.getElementById('gallery-filter-folder');
+  const cur = sel.value;
+  const folders = [..._galleryFolders].sort();
+  sel.innerHTML = '<option value="">Tất cả</option>' +
+    folders.map(f => {
+      // Hiện tên ngắn: salesfield/CH001 → CH001
+      const short = f.replace('salesfield/', '');
+      return `<option value="${f}" ${f===cur?'selected':''}>${short}</option>`;
+    }).join('');
+}
+
+function applyGalleryFilter() {
+  const folder = document.getElementById('gallery-filter-folder')?.value || '';
+  _galleryFiltered = folder
+    ? _galleryPhotos.filter(p => p.folder === folder)
+    : _galleryPhotos;
+  renderGallery(_galleryFiltered);
+}
+
+function clearGalleryFilter() {
+  document.getElementById('gallery-filter-folder').value = '';
+  applyGalleryFilter();
+}
+
+function renderGallery(photos) {
+  const grid  = document.getElementById('gallery-grid');
+  const empty = document.getElementById('gallery-empty');
+
+  document.getElementById('gallery-stats').textContent =
+    `${photos.length} ảnh trên Cloudinary` +
+    (_galleryNextCursor ? ' (còn thêm — bấm Tải thêm)' : '');
+
+  if (!photos.length) {
+    grid.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  grid.innerHTML = photos.map(p => {
+    // Thumbnail Cloudinary: thêm w_200,c_fill vào URL
+    const thumb = p.url.replace('/upload/', '/upload/w_200,h_200,c_fill,q_auto/');
+    const folder = p.folder.replace('salesfield/', '');
+    const date   = p.created_at
+      ? new Date(p.created_at).toLocaleDateString('vi-VN', {
+          day:'2-digit', month:'2-digit', year:'numeric',
+          timeZone:'Asia/Ho_Chi_Minh'
+        })
+      : '—';
+    const kb = p.bytes ? (p.bytes / 1024).toFixed(0) + ' KB' : '';
+
+    return `<div onclick="viewPhoto('${p.url}')" style="
+      cursor:zoom-in;border-radius:8px;overflow:hidden;
+      border:1px solid var(--border);background:var(--surface2);
+      display:flex;flex-direction:column;
+    ">
+      <img src="${thumb}" loading="lazy"
+        style="width:100%;height:140px;object-fit:cover;display:block">
+      <div style="padding:6px 8px;font-size:10px;color:var(--text2);line-height:1.5">
+        <div style="font-weight:600;color:var(--text);white-space:nowrap;
+             overflow:hidden;text-overflow:ellipsis">${folder}</div>
+        <div>${date}</div>
+        ${kb ? `<div>${kb}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

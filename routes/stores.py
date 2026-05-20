@@ -535,3 +535,61 @@ def delete_location_log(log_id):
         return jsonify({"message": "Đã xóa log"})
     finally:
         db.close()
+
+
+# ── GET ảnh từ Cloudinary ─────────────────────────────────────
+@stores_bp.get("/cloudinary-photos")
+@require_auth
+def cloudinary_photos():
+    """
+    Lấy danh sách ảnh từ Cloudinary folder salesfield/.
+    Admin/Manager only.
+    """
+    if g.role not in ("admin", "manager"):
+        return jsonify({"error": "Không có quyền"}), 403
+
+    try:
+        import cloudinary
+        import cloudinary.api
+        import config
+
+        cloudinary.config(
+            cloud_name  = config.CLOUDINARY_CLOUD_NAME,
+            api_key     = config.CLOUDINARY_API_KEY,
+            api_secret  = config.CLOUDINARY_API_SECRET,
+        )
+
+        next_cursor = request.args.get("next_cursor")
+        max_results = int(request.args.get("max_results", 50))
+
+        params = {
+            "type":        "upload",
+            "prefix":      "salesfield/",
+            "max_results": max_results,
+            "context":     True,
+        }
+        if next_cursor:
+            params["next_cursor"] = next_cursor
+
+        result = cloudinary.api.resources(**params)
+
+        photos = []
+        for r in result.get("resources", []):
+            photos.append({
+                "public_id":   r["public_id"],
+                "url":         r["secure_url"],
+                "created_at":  r.get("created_at"),
+                "bytes":       r.get("bytes", 0),
+                "width":       r.get("width"),
+                "height":      r.get("height"),
+                "folder":      r["public_id"].rsplit("/", 1)[0],  # salesfield/CH001
+            })
+
+        return jsonify({
+            "photos":      photos,
+            "total":       result.get("rate_limit_remaining"),
+            "next_cursor": result.get("next_cursor"),  # dùng để phân trang
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
