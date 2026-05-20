@@ -593,3 +593,33 @@ def cloudinary_photos():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@stores_bp.delete("/cloudinary-photos")
+@require_auth
+def delete_cloudinary_photo():
+    """Xóa 1 ảnh khỏi Cloudinary theo public_id."""
+    if g.role not in ("admin", "manager"):
+        return jsonify({"error": "Không có quyền"}), 403
+
+    public_id = request.args.get("public_id", "").strip()
+    if not public_id:
+        return jsonify({"error": "Cần public_id"}), 400
+
+    try:
+        import cloudinary
+        import cloudinary.uploader
+        import config
+
+        cloudinary.config(
+            cloud_name = config.CLOUDINARY_CLOUD_NAME,
+            api_key    = config.CLOUDINARY_API_KEY,
+            api_secret = config.CLOUDINARY_API_SECRET,
+        )
+        result = cloudinary.uploader.destroy(public_id)
+        if result.get("result") == "ok":
+            return jsonify({"message": "Đã xóa ảnh", "public_id": public_id})
+        else:
+            return jsonify({"error": f"Cloudinary: {result}"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

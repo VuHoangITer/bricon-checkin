@@ -35,20 +35,20 @@ def _get_min_minutes(db) -> int:
     return int(row.value) if row else DEFAULT_MIN_MINUTES
 
 
-def _save_photo(file_storage, prefix: str) -> str:
+def _save_photo(file_storage, store_code: str, slot: str) -> str:
     """Upload lên Cloudinary nếu có config, fallback local."""
     import config as _config
     if _config.CLOUDINARY_CLOUD_NAME and _config.CLOUDINARY_CLOUD_NAME != "your_cloud_name":
         try:
             import cloudinary.uploader
             cloudinary.config(
-                cloud_name  = _config.CLOUDINARY_CLOUD_NAME,
-                api_key     = _config.CLOUDINARY_API_KEY,
-                api_secret  = _config.CLOUDINARY_API_SECRET,
-                secure      = True,
+                cloud_name = _config.CLOUDINARY_CLOUD_NAME,
+                api_key    = _config.CLOUDINARY_API_KEY,
+                api_secret = _config.CLOUDINARY_API_SECRET,
+                secure     = True,
             )
-            # Lấy store_code từ prefix: s1_4c7924 → folder salesfield/4c7924
-            folder = f"salesfield/{prefix.split('_')[1][:6]}"
+            # Folder: salesfield/CH001
+            folder = f"salesfield/{store_code}"
             result = cloudinary.uploader.upload(
                 file_storage.stream,
                 folder         = folder,
@@ -63,7 +63,7 @@ def _save_photo(file_storage, prefix: str) -> str:
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     ext = (file_storage.filename.rsplit(".", 1)[-1] or "jpg").lower()
     if ext not in ALLOWED: ext = "jpg"
-    fname = f"{prefix}_{uuid.uuid4().hex[:8]}.{ext}"
+    fname = f"s{slot}_{store_code}_{uuid.uuid4().hex[:8]}.{ext}"
     file_storage.save(os.path.join(UPLOAD_DIR, fname))
     return f"/static/uploads/{fname}"
 
@@ -151,7 +151,6 @@ def start_session():
 
     db = SessionLocal()
     try:
-        # Kiem tra da co session chua
         existing = db.query(CheckinSession).filter_by(user_id=g.user_id).first()
         if existing:
             return jsonify({"error": "Ban dang co mot phien check-in chua hoan thanh"}), 409
@@ -160,14 +159,12 @@ def start_session():
         if not store:
             return jsonify({"error": "Cua hang khong ton tai"}), 404
 
-        # Kiem tra phan cong
         if g.role == "sales":
             ok = db.query(Assignment).filter_by(
                 user_id=g.user_id, store_id=store_id, is_active=True).first()
             if not ok:
                 return jsonify({"error": "Ban khong duoc phan cong cho cua hang nay"}), 403
 
-        # Kiem tra GPS
         within, dist = check_radius(lat, lon, store.latitude, store.longitude)
         if not within:
             return jsonify({"error": f"Ban dang cach cua hang {dist:.0f}m (toi da 200m)"}), 422
@@ -212,7 +209,7 @@ def upload_photo():
 
     if not all([session_id, slot, lat, lon, photo]):
         return jsonify({"error": "Thieu thong tin"}), 400
-    # Slot: 1, 2, 3, 3_1, 3_2, 3_3, 3_4 (3_x la cac anh doi thu bo sung)
+
     base_slot = slot.split('_')[0]
     if base_slot not in ("1","2","3"):
         return jsonify({"error": "Slot khong hop le"}), 400
@@ -229,14 +226,13 @@ def upload_photo():
         if not sess:
             return jsonify({"error": "Khong tim thay phien check-in"}), 404
 
-        # Kiem tra GPS khi chup anh
         store = db.query(Store).filter_by(id=sess.store_id).first()
         within, dist = check_radius(lat, lon, store.latitude, store.longitude)
         if not within:
             return jsonify({"error": f"Ban dang cach cua hang {dist:.0f}m, phai o trong 200m de chup anh"}), 422
 
-        # Luu anh
-        url = _save_photo(photo, f"s{slot}_{sess.store_id[:6]}")
+        # Upload ảnh — dùng store_code làm tên folder
+        url = _save_photo(photo, store.store_code, slot)
         now = datetime.now(VN_TZ)
 
         if base_slot == "1":
@@ -250,15 +246,11 @@ def upload_photo():
             sess.photo2_lon = str(lon)
             sess.photo2_at  = now
         else:
-            # Slot 3, 3_1, 3_2... luu vao photo3_url va photo_public_id
             if not sess.photo3_url or slot == "3":
                 sess.photo3_url = url
                 sess.photo3_lat = str(lat)
                 sess.photo3_lon = str(lon)
                 sess.photo3_at  = now
-            # Luu cac anh phu vao photo_public_id (pipe separated)
-            existing = [u for u in (sess.photo_public_id or "").split("|") if u and not u.startswith("/static/uploads/s2")]
-            # Gop tat ca anh slot 3 lai
             all_slot3 = [u for u in (sess.photo_public_id or "").split("|") if u] if sess.photo_public_id else []
             if url not in all_slot3:
                 all_slot3.append(url)
@@ -312,14 +304,12 @@ def checkout():
 
         store = db.query(Store).filter_by(id=sess.store_id).first()
 
-        # 1. Kiem tra GPS checkout
         within, dist = check_radius(lat, lon, store.latitude, store.longitude)
         if not within:
             return jsonify({
                 "error": f"Ban dang cach cua hang {dist:.0f}m. Phai o trong 200m de check-out"
             }), 422
 
-        # 2. Tinh thoi gian
         min_minutes = _get_min_minutes(db)
         checkin_time = sess.checkin_at
         if checkin_time.tzinfo is None:
@@ -328,27 +318,21 @@ def checkout():
         elapsed_min = max(1, int((now_utc - checkin_time).total_seconds() / 60))
         early_checkout = elapsed_min < min_minutes
 
-        # 3. Kiem tra anh bat buoc (slot 1 va slot 3)
         if not sess.photo1_url:
             return jsonify({"error": "Chua co anh toan canh cua hang (Anh 1)"}), 422
         if not sess.photo3_url:
             return jsonify({"error": "Chua co anh san pham doi thu (Anh 3)"}), 422
 
-        # 4. Luu checkin chinh thuc
         from datetime import date
         note_final = sess.note or ""
         if early_checkout:
             note_final = f"[CHECK-OUT SOM: {elapsed_min}/{min_minutes} phut] " + note_final
-        # Gom tat ca anh slot3: dung sess.photo_public_id (da chua day du)
-        # neu khong co thi fallback ve photo3_url
+
         slot3_urls = []
         if sess.photo_public_id:
             slot3_urls = [u for u in sess.photo_public_id.split("|") if u]
         elif sess.photo3_url:
             slot3_urls = [sess.photo3_url]
-
-        # photo2_url luu rieng, slot3 luu het vao photo_public_id
-        all_extra = [u for u in [sess.photo2_url] + slot3_urls if u]
 
         checkin = Checkin(
             store_id=sess.store_id,
@@ -365,10 +349,7 @@ def checkout():
         )
         db.add(checkin)
 
-        # Cap nhat store
         store.last_checkin_date = date.today()
-
-        # Xoa session
         db.delete(sess)
         db.commit()
 
@@ -403,14 +384,11 @@ def cancel_session():
         db.close()
 
 
-# ── DELETE force-clear (xoa session bi ket, khong can session_id) ──
+# ── DELETE force-clear ────────────────────────────────────────
 @sessions_bp.delete("/force-clear")
 @require_auth
 def force_clear_session():
-    """
-    Xoa tat ca session dang mo cua user hien tai.
-    Dung khi user bi ket va khong vao duoc working screen.
-    """
+    """Xoa tat ca session dang mo cua user hien tai."""
     db = SessionLocal()
     try:
         sessions = db.query(CheckinSession).filter_by(user_id=g.user_id).all()

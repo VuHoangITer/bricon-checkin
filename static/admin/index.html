@@ -2504,21 +2504,53 @@ function renderGallery(photos) {
       : '—';
     const kb = p.bytes ? (p.bytes / 1024).toFixed(0) + ' KB' : '';
 
-    return `<div onclick="viewPhoto('${p.url}')" style="
-      cursor:zoom-in;border-radius:8px;overflow:hidden;
+    const pid = encodeURIComponent(p.public_id);
+    return `<div style="
+      border-radius:8px;overflow:hidden;
       border:1px solid var(--border);background:var(--surface2);
       display:flex;flex-direction:column;
     ">
-      <img src="${thumb}" loading="lazy"
-        style="width:100%;height:140px;object-fit:cover;display:block">
+      <div onclick="viewPhoto('${p.url}')" style="cursor:zoom-in;flex:1">
+        <img src="${thumb}" loading="lazy"
+          style="width:100%;height:140px;object-fit:cover;display:block">
+      </div>
       <div style="padding:6px 8px;font-size:10px;color:var(--text2);line-height:1.5">
         <div style="font-weight:600;color:var(--text);white-space:nowrap;
              overflow:hidden;text-overflow:ellipsis">${folder}</div>
         <div>${date}</div>
         ${kb ? `<div>${kb}</div>` : ''}
       </div>
+      <button onclick="deleteCloudinaryPhoto('${pid}', this)"
+        style="margin:0 8px 8px;padding:5px;border-radius:6px;
+               border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);
+               color:var(--danger);cursor:pointer;font-family:var(--font);
+               font-size:11px;font-weight:600;width:calc(100% - 16px)">
+        🗑️ Xóa khỏi Cloudinary
+      </button>
     </div>`;
   }).join('');
+}
+
+async function deleteCloudinaryPhoto(encodedPublicId, btn) {
+  if (!confirm('Xóa ảnh này khỏi Cloudinary? Không thể khôi phục!')) return;
+  btn.disabled = true;
+  btn.textContent = 'Đang xóa...';
+  try {
+    const public_id = decodeURIComponent(encodedPublicId);
+    const res = await api('DELETE', `/api/stores/cloudinary-photos?public_id=${encodeURIComponent(public_id)}`);
+    showToast('Đã xóa ảnh khỏi Cloudinary', 'success');
+    // Xóa card khỏi UI
+    btn.closest('div[style]').remove();
+    // Xóa khỏi mảng
+    _galleryPhotos = _galleryPhotos.filter(p => p.public_id !== public_id);
+    _galleryFiltered = _galleryFiltered.filter(p => p.public_id !== public_id);
+    document.getElementById('gallery-stats').textContent =
+      `${_galleryFiltered.length} ảnh trên Cloudinary`;
+  } catch(e) {
+    showToast('Lỗi xóa: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '🗑️ Xóa khỏi Cloudinary';
+  }
 }
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
