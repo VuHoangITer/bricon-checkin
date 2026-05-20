@@ -347,3 +347,191 @@ def delete_store(store_id):
             return jsonify({"message": f"Da an cua hang {store.store_name} (co {checkin_count} check-in)", "hard_delete": False})
     finally:
         db.close()
+
+# ══════════════════════════════════════════════════════════════
+# LOCATION — Đặt / sửa tọa độ cửa hàng
+# ══════════════════════════════════════════════════════════════
+
+import os, uuid as _uuid
+from utils import haversine
+
+UPLOAD_DIR_LOC = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "uploads")
+ALLOWED_LOC    = {"jpg","jpeg","png","webp"}
+
+def _save_loc_photo(file_storage, store_code: str) -> str:
+    os.makedirs(UPLOAD_DIR_LOC, exist_ok=True)
+    ext = (file_storage.filename.rsplit(".",1)[-1] or "jpg").lower()
+    if ext not in ALLOWED_LOC: ext = "jpg"
+    fname = f"loc_{store_code}_{_uuid.uuid4().hex[:8]}.{ext}"
+    file_storage.save(os.path.join(UPLOAD_DIR_LOC, fname))
+    return f"/static/uploads/{fname}"
+
+
+@stores_bp.post("/<store_id>/location")
+@require_auth
+def update_location(store_id):
+    """
+    Đặt hoặc sửa tọa độ cửa hàng.
+    multipart/form-data:
+      latitude  : float  (bắt buộc)
+      longitude : float  (bắt buộc)
+      note      : str    (tuỳ chọn)
+      photo     : file   (bắt buộc khi cửa hàng đã có tọa độ - action=fix)
+    """
+    from models.location_log import LocationLog
+
+    lat_str = request.form.get("latitude")
+    lon_str = request.form.get("longitude")
+    note    = request.form.get("note", "").strip()
+    photo   = request.files.get("photo")
+
+    if not lat_str or not lon_str:
+        return jsonify({"error": "Cần latitude và longitude"}), 400
+    try:
+        lat, lon = float(lat_str), float(lon_str)
+    except ValueError:
+        return jsonify({"error": "Tọa độ không hợp lệ"}), 400
+
+    db = SessionLocal()
+    try:
+        # Kiểm tra quyền: sales chỉ sửa cửa hàng được giao
+        store = db.query(Store).filter_by(id=store_id).first()
+        if not store:
+            return jsonify({"error": "Không tìm thấy cửa hàng"}), 404
+
+        if g.role == "sales":
+            ok = db.query(Assignment).filter_by(
+                user_id=g.user_id, store_id=store_id, is_active=True).first()
+            if not ok:
+                return jsonify({"error": "Bạn không được phân công cho cửa hàng này"}), 403
+
+        has_old = store.latitude is not None and store.longitude is not None
+        action  = "fix" if has_old else "set"
+
+        # Bắt buộc ảnh khi sửa (fix)
+        if action == "fix" and not photo:
+            return jsonify({"error": "Cần chụp ảnh xác nhận khi sửa vị trí"}), 422
+
+        # Tính khoảng cách lệch
+        delta_m = None
+        if has_old:
+            delta_m = haversine(store.latitude, store.longitude, lat, lon)
+
+        # Lưu ảnh
+        photo_url = None
+        if photo and photo.filename:
+            photo_url = _save_loc_photo(photo, store.store_code)
+
+        # Ghi log
+        log = LocationLog(
+            store_id  = store_id,
+            user_id   = g.user_id,
+            action    = action,
+            old_lat   = store.latitude,
+            old_lon   = store.longitude,
+            new_lat   = lat,
+            new_lon   = lon,
+            delta_m   = delta_m,
+            photo_url = photo_url,
+            note      = note or None,
+        )
+        db.add(log)
+
+        # Cập nhật tọa độ store
+        store.latitude  = lat
+        store.longitude = lon
+        db.commit()
+
+        return jsonify({
+            "message":  f"Đã {'sửa' if action=='fix' else 'đặt'} vị trí cửa hàng {store.store_name}",
+            "action":   action,
+            "delta_m":  round(delta_m, 1) if delta_m else None,
+            "latitude": lat,
+            "longitude": lon,
+        })
+    finally:
+        db.close()
+
+
+@stores_bp.get("/<store_id>/location-logs")
+@require_auth
+def get_location_logs(store_id):
+    """Lấy lịch sử thay đổi tọa độ của một cửa hàng."""
+    from models.location_log import LocationLog
+    db = SessionLocal()
+    try:
+        logs = db.query(LocationLog)\
+                 .filter_by(store_id=store_id)\
+                 .order_by(LocationLog.created_at.desc())\
+                 .limit(20).all()
+        return jsonify([l.to_dict() for l in logs])
+    finally:
+        db.close()
+
+
+@stores_bp.get("/location-logs/all")
+@require_auth
+def all_location_logs():
+    """Admin: xem toàn bộ log thay đổi tọa độ (mới nhất trước)."""
+    if g.role not in ("admin", "manager"):
+        return jsonify({"error": "Không có quyền"}), 403
+    from models.location_log import LocationLog
+    limit = min(int(request.args.get("limit", 50)), 200)
+    db = SessionLocal()
+    try:
+        logs = db.query(LocationLog)\
+                 .order_by(LocationLog.created_at.desc())\
+                 .limit(limit).all()
+        return jsonify([l.to_dict() for l in logs])
+    finally:
+        db.close()
+
+
+@stores_bp.get("/no-coords")
+@require_auth
+def stores_no_coords():
+    """Danh sách cửa hàng chưa có tọa độ (dùng cho filter sidebar)."""
+    db = SessionLocal()
+    try:
+        q = _user_stores(db, g.user_id, g.role)
+        stores = q.filter(
+            (Store.latitude  == None) | (Store.longitude == None)
+        ).order_by(Store.store_name).all()
+        return jsonify([{
+            "id":   str(s.id),
+            "code": s.store_code,
+            "name": s.store_name,
+            "type": s.store_type.value,
+        } for s in stores])
+    finally:
+        db.close()
+
+
+@stores_bp.delete("/location-logs/<log_id>")
+@require_auth
+def delete_location_log(log_id):
+    if g.role not in ("admin", "manager"):
+        return jsonify({"error": "Không có quyền"}), 403
+    from models.location_log import LocationLog
+    import os
+    db = SessionLocal()
+    try:
+        log = db.query(LocationLog).filter_by(id=log_id).first()
+        if not log:
+            return jsonify({"error": "Không tìm thấy"}), 404
+        # Xóa ảnh local nếu có
+        if log.photo_url and log.photo_url.startswith("/static/uploads/"):
+            path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                log.photo_url.lstrip("/")
+            )
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
+        db.delete(log)
+        db.commit()
+        return jsonify({"message": "Đã xóa log"})
+    finally:
+        db.close()

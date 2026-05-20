@@ -98,24 +98,137 @@ window.addEventListener('resize', () => {
   }
 });
 
+// Cache cửa hàng chưa có tọa độ để dùng trong sidebar
+let _noCoordsStores = [];
+
+// Gọi khi loadMapData xong để load thêm store không có tọa độ
+async function loadNoCoordsForSidebar() {
+  try {
+    const token = localStorage.getItem('sf_token');
+    const res = await fetch('/api/stores/no-coords', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then(r => r.json());
+    _noCoordsStores = Array.isArray(res) ? res : [];
+  } catch {
+    _noCoordsStores = [];
+  }
+  renderStoreList(allFeatures);
+}
+
 function renderStoreList(features) {
   const el = document.getElementById('store-list');
-  const filtered = features.filter(f => currentFilter === 'all' || f.properties.type === currentFilter);
-  if (!filtered.length) {
+
+  const TYPE_COLORS = { retail:'#22C55E', agent:'#EAB308', distributor:'#EF4444', new:'#9CA3AF' };
+
+  // Lọc store có tọa độ theo filter
+  const filtered = features.filter(f =>
+    currentFilter === 'all' || currentFilter === 'no-coords' || f.properties.type === currentFilter
+  );
+
+  // Store chưa có tọa độ — hiện khi filter = all hoặc no-coords
+  const noCoords = (currentFilter === 'all' || currentFilter === 'no-coords')
+    ? _noCoordsStores
+    : [];
+
+  if (!filtered.length && !noCoords.length) {
     el.innerHTML = '<div style="padding:12px;color:var(--text2);font-size:12px;">Không có cửa hàng</div>';
     return;
   }
-  el.innerHTML = filtered.slice(0, 50).map(f => {
-    const p = f.properties;
-    const cfg = TYPE_CONFIG[p.type] || TYPE_CONFIG.new;
-    return `<div class="store-item" onclick="selectStoreFromList('${p.id}')">
-      <div class="store-item-dot" style="background:${p.color};${p.type==='new'?'border:1.5px solid #666':''}"></div>
-      <div class="store-item-info">
-        <div class="store-item-name">${p.name}</div>
-        <div class="store-item-meta">${p.code} · ${cfg.label}</div>
+
+  // Render store chưa có tọa độ — nổi bật, nằm ĐẦU TIÊN
+  const noCoordsHtml = noCoords.map(s => {
+    const color = TYPE_COLORS[s.type] || '#9CA3AF';
+    const cfg   = TYPE_CONFIG[s.type] || TYPE_CONFIG.new;
+    return `<div class="store-item" onclick="selectNoCoordsStoreFromList('${s.id}','${s.name.replace(/'/g,"\'")}','${s.code}','${s.type}')"
+      style="border-left:3px solid var(--warn);background:rgba(234,179,8,0.06)">
+      <div class="store-item-dot" style="background:${color};${s.type==='new'?'border:1.5px solid #666':''}"></div>
+      <div class="store-item-info" style="flex:1;min-width:0">
+        <div class="store-item-name">${s.name}</div>
+        <div class="store-item-meta">${s.code} · ${cfg.label}</div>
       </div>
+      <span style="flex-shrink:0;font-size:10px;font-weight:600;color:var(--warn);
+                   background:rgba(234,179,8,0.15);padding:2px 6px;border-radius:4px">📍 Chưa có</span>
     </div>`;
   }).join('');
+
+  // Header phân tách nếu có cả 2 nhóm và filter = all
+  const separator = (noCoordsHtml && filtered.length && currentFilter === 'all')
+    ? `<div style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;
+         letter-spacing:.5px;padding:8px 14px 4px;border-top:1px solid var(--border)">
+         Đã có tọa độ
+       </div>`
+    : '';
+
+  // Render store có tọa độ (ẩn khi filter = no-coords)
+  const withCoordsHtml = currentFilter === 'no-coords' ? '' :
+    filtered.slice(0, 50).map(f => {
+      const p = f.properties;
+      const cfg = TYPE_CONFIG[p.type] || TYPE_CONFIG.new;
+      return `<div class="store-item" onclick="selectStoreFromList('${p.id}')">
+        <div class="store-item-dot" style="background:${p.color};${p.type==='new'?'border:1.5px solid #666':''}"></div>
+        <div class="store-item-info">
+          <div class="store-item-name">${p.name}</div>
+          <div class="store-item-meta">${p.code} · ${cfg.label}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+  el.innerHTML = noCoordsHtml + separator + withCoordsHtml;
+}
+
+// Bấm vào store chưa có tọa độ trong sidebar → mở bottom sheet (không mở modal)
+async function selectNoCoordsStoreFromList(id, name, code, type) {
+  const TYPE_CONFIG_LOCAL = {
+    new:         { color:'#FFFFFF', label:'Chưa mua hàng',    bg:'#374151', text:'#9CA3AF' },
+    retail:      { color:'#22C55E', label:'Cửa hàng bán lẻ', bg:'#14532D', text:'#86EFAC' },
+    agent:       { color:'#EAB308', label:'Đại lý',           bg:'#713F12', text:'#FDE047' },
+    distributor: { color:'#EF4444', label:'Nhà phân phối',    bg:'#7F1D1D', text:'#FCA5A5' },
+  };
+
+  // Fetch đầy đủ thông tin
+  let storeProps = { id, name, code, type, address:'', owner:'', phone:'',
+    last_checkin:null, last_call:null, activity:'none', _coords:[null,null],
+    ...TYPE_CONFIG_LOCAL[type] };
+  try {
+    const token = localStorage.getItem('sf_token');
+    const res = await fetch(`/api/stores/${id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then(r => r.json());
+    const p = res.properties || {};
+    storeProps = {
+      ...storeProps,
+      name:    p.name    || name,
+      code:    p.code    || code,
+      type:    p.type    || type,
+      address: p.address || '',
+      owner:   p.owner   || '',
+      phone:   p.phone   || '',
+      last_checkin: p.last_checkin || null,
+      last_call:    p.last_call    || null,
+      ...TYPE_CONFIG_LOCAL[p.type || type],
+    };
+  } catch {}
+
+  // Mở bottom sheet bình thường — nút "Đặt vị trí" sẽ tự hiện trong sheet-location-btns
+  openStoreSheet(storeProps, [null, null]);
+}
+
+function searchStores(q) {
+  const lower = q.toLowerCase();
+  const filtered = q ? allFeatures.filter(f =>
+    f.properties.name.toLowerCase().includes(lower) ||
+    f.properties.code.toLowerCase().includes(lower)
+  ) : allFeatures;
+  if (q) {
+    const orig = _noCoordsStores;
+    _noCoordsStores = orig.filter(s =>
+      s.name.toLowerCase().includes(lower) || s.code.toLowerCase().includes(lower)
+    );
+    renderStoreList(filtered);
+    _noCoordsStores = orig;
+  } else {
+    renderStoreList(filtered);
+  }
 }
 
 function selectStoreFromList(storeId) {
@@ -132,7 +245,17 @@ function searchStores(q) {
     f.properties.name.toLowerCase().includes(lower) ||
     f.properties.code.toLowerCase().includes(lower)
   ) : allFeatures;
-  renderStoreList(filtered);
+  // Cũng lọc _noCoordsStores theo từ khoá
+  if (q) {
+    const orig = _noCoordsStores;
+    _noCoordsStores = orig.filter(s =>
+      s.name.toLowerCase().includes(lower) || s.code.toLowerCase().includes(lower)
+    );
+    renderStoreList(filtered);
+    _noCoordsStores = orig; // restore
+  } else {
+    renderStoreList(filtered);
+  }
 }
 
 // ─────────────────────────────────────────
@@ -178,9 +301,12 @@ function openStoreSheet(props, coords) {
 
   const btnCI   = document.getElementById('sheet-btn-checkin');
   const btnCall = document.getElementById('sheet-btn-call');
-  const role = currentUser?.role || '';
+  const role = currentUser?.role || JSON.parse(localStorage.getItem('sf_user') || '{}').role || '';
   if (btnCI)   btnCI.style.display   = (role === 'telesales') ? 'none' : '';
   if (btnCall) btnCall.style.display = '';
+
+  // ── Nút vị trí ──────────────────────────────────────────
+  _renderLocationBtns(props, coords);
 
   loadStoreHistory(props.id);
 }
@@ -336,6 +462,16 @@ async function loadStoreHistory(storeId) {
 // ─────────────────────────────────────────
 function startCheckinFromSheet() {
   const store = selectedStore;
+
+  // Bắt buộc đặt vị trí trước khi check-in
+  const hasCoords = store._coords && store._coords[0] != null && store._coords[1] != null;
+  if (!hasCoords) {
+    showToast('Cần đặt vị trí cửa hàng trước khi check-in', 'error');
+    // Cuộn xuống nút "Đặt vị trí ngay" trong bottom sheet
+    document.getElementById('sheet-location-btns')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
   closeSheet();
   selectedStore = store;
   openCheckinModal();
@@ -603,4 +739,208 @@ async function submitCallLog() {
     showToast(`Đã ghi nhận cuộc gọi đến ${selectedStore.name}`, 'success');
     loadMapData();
   } catch(e) { showToast('Lỗi ghi nhận cuộc gọi', 'error'); }
+}
+
+// ─────────────────────────────────────────
+// CẬP NHẬT TỌA ĐỘ CỬA HÀNG
+// ─────────────────────────────────────────
+
+/**
+ * Mở modal đặt/sửa vị trí cửa hàng.
+ * action = 'set' (chưa có tọa độ) | 'fix' (sai tọa độ)
+ */
+function openLocationModal(action) {
+  if (!selectedStore) return;
+
+  const isfix = action === 'fix';
+  const title = isfix ? '📍 Báo sai & sửa vị trí' : '📍 Đặt vị trí cửa hàng';
+
+  // Thông tin cửa hàng để nhân viên xác nhận đúng chỗ
+  const infoLines = [];
+  if (selectedStore.address) infoLines.push(`📍 ${selectedStore.address}`);
+  if (selectedStore.owner)   infoLines.push(`👤 ${selectedStore.owner}`);
+  if (selectedStore.phone)   infoLines.push(`📞 ${selectedStore.phone}`);
+  const infoHtml = infoLines.length
+    ? `<div style="margin-top:8px;display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text2)">${infoLines.map(l => `<span>${l}</span>`).join('')}</div>`
+    : '';
+
+  const desc = isfix
+    ? `<div>Bạn đang đứng đúng tại <strong>${selectedStore.name}</strong> nhưng hệ thống báo sai vị trí.<br>Chụp 1 ảnh xác nhận rồi bấm cập nhật.</div>${infoHtml}`
+    : `<div>Cửa hàng <strong>${selectedStore.name}</strong> chưa có tọa độ. Lấy GPS hiện tại của bạn để đặt vị trí.</div>${infoHtml}`;
+
+  document.getElementById('loc-modal-title').textContent   = title;
+  document.getElementById('loc-modal-desc').innerHTML      = desc;
+  document.getElementById('loc-gps-status').textContent    = '📡 Chưa lấy GPS';
+  document.getElementById('loc-gps-status').className      = 'gps-status';
+  document.getElementById('loc-note').value                = '';
+  document.getElementById('loc-photo-preview').innerHTML   = isfix ? '📷 Bấm để chụp ảnh xác nhận' : '';
+  document.getElementById('loc-photo-required').style.display = isfix ? '' : 'none';
+  document.getElementById('loc-action').value              = action;
+  document.getElementById('loc-lat').value                 = '';
+  document.getElementById('loc-lon').value                 = '';
+  _locPhotoFile = null;
+
+  // Tự động lấy GPS ngay khi mở
+  _captureLocGPS();
+
+  document.getElementById('modal-location').classList.remove('hidden');
+}
+
+let _locPhotoFile = null;
+
+function _captureLocGPS() {
+  const el = document.getElementById('loc-gps-status');
+  el.textContent = '📡 Đang lấy GPS...';
+  el.className   = 'gps-status';
+  navigator.geolocation.getCurrentPosition(pos => {
+    document.getElementById('loc-lat').value = pos.coords.latitude;
+    document.getElementById('loc-lon').value = pos.coords.longitude;
+    el.textContent = `✅ ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)} (±${Math.round(pos.coords.accuracy)}m)`;
+    el.className   = 'gps-status ok';
+  }, () => {
+    el.textContent = '❌ Không lấy được GPS — thử lại';
+    el.className   = 'gps-status err';
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+}
+
+function triggerLocPhoto() {
+  // Hiện menu chụp / thư viện
+  const existing = document.getElementById('loc-photo-menu');
+  if (existing) existing.remove();
+  const menu = document.createElement('div');
+  menu.id = 'loc-photo-menu';
+  menu.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  menu.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:16px;width:100%;max-width:480px">
+      <div style="text-align:center;font-size:13px;color:var(--text2);margin-bottom:12px;font-weight:500">Ảnh xác nhận vị trí</div>
+      <button onclick="_pickLocPhoto('camera')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;background:var(--surface2);border:none;border-radius:10px;margin-bottom:8px;color:var(--text);font-family:var(--font);font-size:15px;cursor:pointer">📷 <span>Chụp ảnh</span></button>
+      <button onclick="_pickLocPhoto('gallery')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;background:var(--surface2);border:none;border-radius:10px;margin-bottom:8px;color:var(--text);font-family:var(--font);font-size:15px;cursor:pointer">🖼️ <span>Chọn từ thư viện</span></button>
+      <button onclick="document.getElementById('loc-photo-menu').remove()" style="display:block;width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text2);font-family:var(--font);font-size:14px;cursor:pointer">Huỷ</button>
+    </div>`;
+  menu.onclick = e => { if (e.target === menu) menu.remove(); };
+  document.body.appendChild(menu);
+}
+
+function _pickLocPhoto(mode) {
+  document.getElementById('loc-photo-menu')?.remove();
+  let input = document.getElementById('_loc-photo-input');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file'; input.id = '_loc-photo-input';
+    input.accept = 'image/*'; input.style.display = 'none';
+    input.onchange = () => {
+      const file = input.files[0];
+      if (!file) return;
+      _locPhotoFile = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        document.getElementById('loc-photo-preview').innerHTML =
+          `<img src="${e.target.result}" style="width:100%;max-height:160px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`;
+      };
+      reader.readAsDataURL(file);
+    };
+    document.body.appendChild(input);
+  }
+  mode === 'camera' ? input.setAttribute('capture','environment') : input.removeAttribute('capture');
+  input.value = '';
+  input.click();
+}
+
+async function submitLocationUpdate() {
+  const lat    = document.getElementById('loc-lat').value;
+  const lon    = document.getElementById('loc-lon').value;
+  const action = document.getElementById('loc-action').value;
+  const note   = document.getElementById('loc-note').value.trim();
+
+  if (!lat || !lon) {
+    showToast('Cần lấy GPS trước', 'error'); return;
+  }
+  if (action === 'fix' && !_locPhotoFile) {
+    showToast('Cần chụp ảnh xác nhận khi sửa vị trí', 'error'); return;
+  }
+
+  const btn = document.getElementById('btn-submit-location');
+  btn.disabled = true; btn.textContent = 'Đang lưu...';
+
+  try {
+    const fd = new FormData();
+    fd.append('latitude',  lat);
+    fd.append('longitude', lon);
+    if (note)          fd.append('note', note);
+    if (_locPhotoFile) fd.append('photo', _locPhotoFile);
+
+    const res = await fetch(`/api/stores/${selectedStore.id}/location`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('sf_token')}` },
+      body: fd,
+    }).then(r => r.json());
+
+    if (res.error) { showToast(res.error, 'error'); return; }
+
+    closeModal('modal-location');
+    showToast(res.message, 'success');
+
+    // Nếu delta lớn hơn 100m thì cảnh báo
+    if (res.delta_m && res.delta_m > 100) {
+      setTimeout(() => showToast(`⚠️ Vị trí lệch ${Math.round(res.delta_m)}m so với trước`, 'error'), 600);
+    }
+
+    // Reload map để cập nhật marker
+    loadMapData();
+
+    // Nếu đang mở bottom sheet thì tự động check-in luôn
+    if (action === 'set' && selectedStore) {
+      setTimeout(() => openCheckinModal(), 800);
+    }
+  } catch(e) {
+    showToast('Lỗi cập nhật vị trí: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cập nhật vị trí';
+  }
+}
+
+
+// ─────────────────────────────────────────
+// RENDER NÚT VỊ TRÍ TRONG BOTTOM SHEET
+// ─────────────────────────────────────────
+function _renderLocationBtns(props, coords) {
+  const el = document.getElementById('sheet-location-btns');
+  if (!el) return;
+
+  const role = currentUser?.role || JSON.parse(localStorage.getItem('sf_user') || '{}').role || '';
+  // telesales không check-in nên cũng không cần sửa vị trí
+  if (role === 'telesales') { el.innerHTML = ''; return; }
+
+  const [lon, lat] = coords || [null, null];
+  const hasCoords  = lat != null && lon != null;
+
+  if (!hasCoords) {
+    // Chưa có tọa độ → nút đặt vị trí nổi bật
+    el.innerHTML = `
+      <div style="background:rgba(234,179,8,.08);border:1px solid rgba(234,179,8,.3);
+           border-radius:10px;padding:10px 12px;margin-top:4px">
+        <div style="font-size:12px;color:var(--warn);font-weight:600;margin-bottom:6px">
+          ⚠️ Cửa hàng này chưa có tọa độ
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.5">
+          Nếu bạn đang đứng tại đây, hãy đặt vị trí để check-in lần sau.
+        </div>
+        <button onclick="openLocationModal('set')"
+          style="width:100%;padding:9px;border-radius:8px;
+                 background:var(--warn);color:#000;border:none;
+                 cursor:pointer;font-family:var(--font);font-size:13px;font-weight:600">
+          📍 Đặt vị trí ngay
+        </button>
+      </div>`;
+  } else {
+    // Đã có tọa độ → nút "Báo sai vị trí" nhỏ hơn, ít nổi bật hơn
+    el.innerHTML = `
+      <button onclick="openLocationModal('fix')"
+        style="width:100%;padding:8px;border-radius:8px;
+               border:1px solid var(--border);background:transparent;
+               color:var(--text2);cursor:pointer;font-family:var(--font);
+               font-size:12px;display:flex;align-items:center;justify-content:center;gap:6px">
+        🗺️ Báo sai vị trí & cập nhật
+      </button>`;
+  }
 }

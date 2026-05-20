@@ -363,6 +363,9 @@ body.light .toast { background: #ffffff; }
       <button class="nav-item" onclick="showPage('map', this)">
         <span class="nav-icon">🗺️</span> Bản đồ
       </button>
+      <button class="nav-item" onclick="showPage('location-logs', this)">
+        <span class="nav-icon">📌</span> Lịch sử vị trí
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -625,6 +628,39 @@ body.light .toast { background: #ffffff; }
             <tbody id="calls-table"></tbody>
           </table>
           <div class="mobile-cards" id="calls-cards"></div>
+        </div>
+      </div>
+
+      <!-- LOCATION LOGS PAGE -->
+      <div class="page" id="page-location-logs">
+        <div class="search-bar">
+          <input class="search-input" type="search" placeholder="Tìm theo tên nhân viên hoặc cửa hàng..."
+                 oninput="filterLocationLogs(this.value)" id="loc-log-search">
+          <select class="search-input" style="flex:0;min-width:160px" onchange="filterLocationLogs()" id="loc-log-action-filter">
+            <option value="">Tất cả loại</option>
+            <option value="set">📍 Đặt mới</option>
+            <option value="fix">🔧 Sửa sai</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Nhân viên</th>
+                <th>Cửa hàng</th>
+                <th>Loại</th>
+                <th>Tọa độ cũ</th>
+                <th>Tọa độ mới</th>
+                <th>Lệch (m)</th>
+                <th>Ghi chú</th>
+                <th>Ảnh</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="loc-logs-table"></tbody>
+          </table>
+          <div class="mobile-cards" id="loc-logs-cards"></div>
         </div>
       </div>
 
@@ -1060,17 +1096,19 @@ const TITLES = {
   calls:    'Lịch sử gọi điện',
   settings: 'Cài đặt hệ thống',
   map:      'Bản đồ khách hàng',
+  'location-logs': '📌 Lịch sử thay đổi vị trí',
 };
 
 const PAGE_ACTIONS = {
-  employees:   () => `<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Nhân viên</button>`,
-  assignments: () => `<button class="btn btn-primary btn-sm" onclick="openAssign()">+ Giao</button>`,
-  stores:      () => `<button class="btn btn-primary btn-sm" onclick="openCreateStore()">+ Cửa hàng</button>`,
-  dashboard:   () => ``,
-  checkins:    () => ``,
-  calls:       () => ``,
-  settings:    () => ``,
-  map:         () => ``,
+  employees:       () => `<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Nhân viên</button>`,
+  assignments:     () => `<button class="btn btn-primary btn-sm" onclick="openAssign()">+ Giao</button>`,
+  stores:          () => `<button class="btn btn-primary btn-sm" onclick="openCreateStore()">+ Cửa hàng</button>`,
+  dashboard:       () => ``,
+  checkins:        () => ``,
+  calls:           () => ``,
+  settings:        () => ``,
+  map:             () => ``,
+  'location-logs': () => ``,
 };
 
 function showPage(name, btn) {
@@ -1087,14 +1125,15 @@ function showPage(name, btn) {
 let allEmployees = [], allStores = [], allAssignments = [], allCheckins = [];
 
 async function loadPage(name) {
-  if (name === 'dashboard')   await loadDashboard();
-  if (name === 'employees')   await loadEmployees();
-  if (name === 'stores')      await loadStores();
-  if (name === 'assignments') await loadAssignments();
-  if (name === 'checkins')    await loadCheckins();
-  if (name === 'calls')       await loadCalls();
-  if (name === 'settings')    await loadSettings();
-  if (name === 'map')         await loadAdminMap();
+  if (name === 'dashboard')      await loadDashboard();
+  if (name === 'employees')      await loadEmployees();
+  if (name === 'stores')         await loadStores();
+  if (name === 'assignments')    await loadAssignments();
+  if (name === 'checkins')       await loadCheckins();
+  if (name === 'calls')          await loadCalls();
+  if (name === 'settings')       await loadSettings();
+  if (name === 'map')            await loadAdminMap();
+  if (name === 'location-logs')  await loadLocationLogs();
 }
 
 // DASHBOARD
@@ -2208,6 +2247,117 @@ async function deleteCall(callId) {
     showToast('Đã xóa', 'success');
     loadCalls();
   } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ── LOCATION LOGS ─────────────────────────────────────────────
+let allLocationLogs = [];
+
+async function deleteLocationLog(logId) {
+  if (!confirm('Xóa log thay đổi vị trí này?')) return;
+  try {
+    await api('DELETE', `/api/stores/location-logs/${logId}`);
+    showToast('Đã xóa log', 'success');
+    loadLocationLogs();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function loadLocationLogs() {
+  const res = await api('GET', '/api/stores/location-logs/all?limit=100') || [];
+  allLocationLogs = Array.isArray(res) ? res : [];
+  renderLocationLogs(allLocationLogs);
+}
+
+function filterLocationLogs() {
+  const q      = (document.getElementById('loc-log-search')?.value || '').toLowerCase();
+  const action = document.getElementById('loc-log-action-filter')?.value || '';
+  renderLocationLogs(allLocationLogs.filter(l => {
+    if (action && l.action !== action) return false;
+    if (q && !l.user_name?.toLowerCase().includes(q) &&
+             !l.store_name?.toLowerCase().includes(q)) return false;
+    return true;
+  }));
+}
+
+function renderLocationLogs(rows) {
+  const actionBadge = a => a === 'fix'
+    ? `<span class="badge" style="background:#3d2a0f;color:#fcd34d">🔧 Sửa sai</span>`
+    : `<span class="badge" style="background:#1c3a2e;color:#6ee7b7">📍 Đặt mới</span>`;
+
+  const deltaBadge = m => {
+    if (m == null) return '—';
+    const color = m > 500 ? 'var(--danger)' : m > 100 ? 'var(--warn)' : 'var(--success)';
+    return `<span style="color:${color};font-weight:600">${Math.round(m)}m</span>`;
+  };
+
+  // Format tọa độ, kèm link Google Maps
+  const coordCell = (lat, lon, label) => {
+    if (lat == null || lon == null) return '<td style="color:var(--text2)">—</td>';
+    return `<td>
+      <a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank"
+         title="Xem trên Google Maps"
+         style="font-size:11px;font-family:monospace;color:var(--accent);text-decoration:none;
+                display:block;white-space:nowrap">
+        ${lat.toFixed(6)},<br>${lon.toFixed(6)}
+      </a>
+    </td>`;
+  };
+
+  document.getElementById('loc-logs-table').innerHTML = rows.map(l => `
+    <tr>
+      <td style="color:var(--text2);white-space:nowrap">${fmtDate(l.created_at)}</td>
+      <td style="font-weight:500">${l.user_name || '—'}</td>
+      <td>${l.store_name || '—'}</td>
+      <td>${actionBadge(l.action)}</td>
+      ${coordCell(l.old_lat, l.old_lon, 'cũ')}
+      ${coordCell(l.new_lat, l.new_lon, 'mới')}
+      <td>${deltaBadge(l.delta_m)}</td>
+      ${descCell(l.note)}
+      <td>${l.photo_url
+        ? `<img src="${l.photo_url}" onclick="viewPhoto('${l.photo_url}')"
+             style="width:44px;height:44px;object-fit:cover;border-radius:5px;
+                    cursor:zoom-in;border:1px solid var(--border)" loading="lazy">`
+        : '—'
+      }</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteLocationLog('${l.id}')">Xóa</button></td>
+    </tr>`).join('') ||
+    '<tr><td colspan="10" style="text-align:center;color:var(--text2);padding:24px">Chưa có dữ liệu</td></tr>';
+
+  // Mobile cards
+  const el = document.getElementById('loc-logs-cards');
+  if (el) el.innerHTML = rows.map(l => `
+    <div class="m-card">
+      <div class="m-card-header">
+        <div>
+          <div class="m-card-title">${l.store_name || '—'}</div>
+          <div class="m-card-sub">${fmtDate(l.created_at)}</div>
+        </div>
+        ${l.action === 'fix'
+          ? `<span class="badge" style="background:#3d2a0f;color:#fcd34d">🔧 Sửa sai</span>`
+          : `<span class="badge" style="background:#1c3a2e;color:#6ee7b7">📍 Đặt mới</span>`}
+      </div>
+      <div class="m-card-row">👤 ${l.user_name || '—'}</div>
+      ${l.old_lat != null ? `<div class="m-card-row" style="font-family:monospace;font-size:11px">
+        📌 Cũ: <a href="https://www.google.com/maps?q=${l.old_lat},${l.old_lon}" target="_blank"
+          style="color:var(--text2)">${l.old_lat.toFixed(6)}, ${l.old_lon.toFixed(6)}</a>
+      </div>` : ''}
+      <div class="m-card-row" style="font-family:monospace;font-size:11px">
+        📍 Mới: <a href="https://www.google.com/maps?q=${l.new_lat},${l.new_lon}" target="_blank"
+          style="color:var(--accent)">${l.new_lat.toFixed(6)}, ${l.new_lon.toFixed(6)}</a>
+      </div>
+      ${l.delta_m != null ? `<div class="m-card-row">
+        📏 Lệch: <span style="font-weight:600;color:${l.delta_m>500?'var(--danger)':l.delta_m>100?'var(--warn)':'var(--success)'}">
+          ${Math.round(l.delta_m)}m</span>
+      </div>` : ''}
+      ${l.note ? `<div class="m-card-row" style="color:var(--text)">${l.note}</div>` : ''}
+      ${l.photo_url ? `<div style="margin-top:4px">
+        <img src="${l.photo_url}" onclick="viewPhoto('${l.photo_url}')"
+          style="width:80px;height:80px;object-fit:cover;border-radius:6px;cursor:zoom-in;border:1px solid var(--border)">
+      </div>` : ''}
+      <div class="m-card-actions">
+        <button class="btn btn-danger btn-sm" onclick="deleteLocationLog('${l.id}')">Xóa</button>
+      </div>
+    </div>`).join('') ||
+    '<div style="padding:16px;color:var(--text2);text-align:center;font-size:13px">Chưa có dữ liệu</div>';
 }
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

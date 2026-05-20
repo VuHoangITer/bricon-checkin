@@ -18,12 +18,10 @@ function initMap() {
   map.on('click', closeSheet);
 }
 
-// ── Build icon HTML theo activity ────────────────────────────
 function buildMarkerHtml(color, activity, type) {
   const border = type === 'new' ? 'border:2px solid #888;' : '';
 
   switch(activity) {
-
     case 'both':
       return `<div style="
         width:28px;height:28px;cursor:pointer;
@@ -86,8 +84,6 @@ function buildMarker(feature) {
   const marker = L.marker([lat, lon], { icon });
   marker.on('click', e => {
     e.originalEvent.stopPropagation();
-    // FIX: spread toàn bộ properties thay vì destructure thủ công
-    // đảm bảo last_checkin, last_call và tất cả field khác đều được pass
     openStoreSheet({ ...p, activity: act }, [lon, lat]);
   });
   marker._storeId   = p.id;
@@ -124,6 +120,8 @@ async function loadMapData() {
     navigator.geolocation?.getCurrentPosition(pos => {
       map.setView([pos.coords.latitude, pos.coords.longitude], 14);
     });
+    // Load thêm store chưa có tọa độ vào sidebar
+    loadNoCoordsForSidebar();
   } catch (e) {
     showToast('Không tải được dữ liệu bản đồ: ' + e.message, 'error');
   }
@@ -136,4 +134,122 @@ function updateStats() {
     f.properties.last_checkin?.slice(0, 10) === today).length;
   document.getElementById('stat-pending').textContent = allFeatures.filter(f =>
     f.properties.activity === 'none').length;
+}
+
+// ── Filter "chưa có tọa độ" ──────────────────────────────────
+let _showNoCoords = false;
+
+function toggleNoCoordsFilter(btn) {
+  _showNoCoords = !_showNoCoords;
+  btn.classList.toggle('active', _showNoCoords);
+  if (_showNoCoords) {
+    showNoCoordsPanel();
+  } else {
+    document.getElementById('no-coords-panel')?.remove();
+  }
+}
+
+async function showNoCoordsPanel() {
+  document.getElementById('no-coords-panel')?.remove();
+
+  const panel = document.createElement('div');
+  panel.id = 'no-coords-panel';
+  panel.style.cssText = `
+    position:fixed;bottom:0;left:0;right:0;z-index:850;
+    background:var(--surface);border-top:1px solid var(--border);
+    border-radius:16px 16px 0 0;
+    max-height:50vh;overflow-y:auto;
+    padding:14px 16px 24px;
+    font-family:var(--font);
+  `;
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-weight:600;font-size:14px">📍 Cửa hàng chưa có tọa độ</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px">Đến nơi rồi bấm vào cửa hàng để đặt vị trí</div>
+      </div>
+      <button onclick="document.getElementById('no-coords-panel').remove();_showNoCoords=false;document.querySelector('.pill[data-type=no-coords]')?.classList.remove('active')"
+        style="width:28px;height:28px;border-radius:6px;border:none;background:var(--surface2);color:var(--text2);cursor:pointer;font-size:14px">✕</button>
+    </div>
+    <div id="no-coords-list" style="display:flex;flex-direction:column;gap:6px">
+      <div style="color:var(--text2);font-size:13px">Đang tải...</div>
+    </div>
+  `;
+  document.body.appendChild(panel);
+
+  try {
+    const token = localStorage.getItem('sf_token');
+    const res = await fetch('/api/stores/no-coords', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then(r => r.json());
+
+    const list = document.getElementById('no-coords-list');
+    if (!res.length) {
+      list.innerHTML = '<div style="color:var(--success);font-size:13px">✅ Tất cả cửa hàng đã có tọa độ!</div>';
+      return;
+    }
+
+    const TYPE_COLORS = { retail:'#22C55E', agent:'#EAB308', distributor:'#EF4444', new:'#9CA3AF' };
+    list.innerHTML = res.map(s => `
+      <div onclick="openNoCoordsStore('${s.id}','${s.name.replace(/'/g,"\\'")}','${s.code}','${s.type}')"
+        style="display:flex;align-items:center;gap:10px;padding:10px 12px;
+               background:var(--surface2);border-radius:8px;cursor:pointer;border:1px solid var(--border)">
+        <div style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${TYPE_COLORS[s.type]||'#fff'};
+          ${s.type==='new'?'border:1.5px solid #666':''}"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}</div>
+          <div style="font-size:11px;color:var(--text2)">${s.code} · Chưa có tọa độ</div>
+        </div>
+        <div style="font-size:11px;color:var(--accent);font-weight:600;flex-shrink:0">Đặt vị trí →</div>
+      </div>`).join('');
+  } catch(e) {
+    document.getElementById('no-coords-list').innerHTML = '<div style="color:var(--danger);font-size:13px">Lỗi tải dữ liệu</div>';
+  }
+}
+
+async function openNoCoordsStore(id, name, code, type) {
+  const TYPE_CONFIG_LOCAL = {
+    new:         { color:'#FFFFFF', label:'Chưa mua hàng',    bg:'#374151', text:'#9CA3AF' },
+    retail:      { color:'#22C55E', label:'Cửa hàng bán lẻ', bg:'#14532D', text:'#86EFAC' },
+    agent:       { color:'#EAB308', label:'Đại lý',           bg:'#713F12', text:'#FDE047' },
+    distributor: { color:'#EF4444', label:'Nhà phân phối',    bg:'#7F1D1D', text:'#FCA5A5' },
+  };
+
+  document.getElementById('no-coords-panel')?.remove();
+
+  // Fetch đầy đủ thông tin từ API
+  try {
+    const token = localStorage.getItem('sf_token');
+    const res = await fetch(`/api/stores/${id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then(r => r.json());
+
+    const p = res.properties || {};
+    selectedStore = {
+      id,
+      name:         p.name    || name,
+      code:         p.code    || code,
+      type:         p.type    || type,
+      address:      p.address || '',
+      owner:        p.owner   || '',
+      phone:        p.phone   || '',
+      last_checkin: p.last_checkin || null,
+      last_call:    p.last_call    || null,
+      activity:     'none',
+      _coords:      [null, null],
+      ...TYPE_CONFIG_LOCAL[p.type || type],
+    };
+  } catch {
+    // Fallback nếu fetch lỗi
+    selectedStore = {
+      id, name, code, type,
+      address: '', owner: '', phone: '',
+      activity: 'none',
+      _coords: [null, null],
+      ...TYPE_CONFIG_LOCAL[type],
+    };
+  }
+
+  openLocationModal('set');
 }
