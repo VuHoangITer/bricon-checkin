@@ -6,3 +6,4 @@ bcrypt==5.0.0
 pyjwt==2.12.1
 alembic==1.18.4
 cloudinary==1.44.2
+Pillow==11.2.1

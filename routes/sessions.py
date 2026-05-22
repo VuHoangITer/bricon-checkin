@@ -1,15 +1,8 @@
 """
 API quan ly phien check-in (session-based checkin/checkout).
-
-Flow:
-  POST /api/session/start          -> bat dau check-in, tra ve session_id
-  POST /api/session/photo          -> upload tung anh (1,2,3) kem GPS
-  POST /api/session/checkout       -> ket thuc, validate du dieu kien
-  GET  /api/session/active         -> lay session dang mo cua user
-  GET  /api/session/settings       -> lay cai dat he thong (min_minutes)
-  PUT  /api/session/settings       -> admin cap nhat cai dat
 """
 import os
+import io
 import uuid
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify, g
@@ -35,9 +28,100 @@ def _get_min_minutes(db) -> int:
     return int(row.value) if row else DEFAULT_MIN_MINUTES
 
 
-def _save_photo(file_storage, store_code: str, slot: str) -> str:
-    """Upload lên Cloudinary nếu có config, fallback local."""
+def _stamp_photo(image_bytes: bytes, lat: float, lon: float,
+                 user_name: str, store_name: str) -> bytes:
+    """
+    Stamp tọa độ GPS, thời gian, tên nhân viên lên góc dưới ảnh.
+    Giống watermark của app giao hàng.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        W, H = img.size
+
+        draw = ImageDraw.Draw(img)
+
+        # Font size tỷ lệ theo chiều rộng ảnh
+        font_size = max(20, W // 35)
+
+        # Thử load font đẹp, fallback về default
+        font = None
+        font_bold = None
+        font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "C:/Windows/Fonts/arial.ttf",
+        ]
+        for fp in font_paths:
+            if os.path.exists(fp):
+                try:
+                    font      = ImageFont.truetype(fp, font_size)
+                    font_bold = ImageFont.truetype(fp, int(font_size * 1.1))
+                    break
+                except: pass
+        if not font:
+            font = font_bold = ImageFont.load_default()
+
+        # Nội dung stamp
+        now_vn = datetime.now(VN_TZ)
+        lines = [
+            f"{lat:.6f}, {lon:.6f}",
+            now_vn.strftime("%Y-%m-%d %H:%M:%S"),
+            store_name,
+            user_name,
+        ]
+
+        # Tính kích thước vùng stamp
+        line_h   = font_size + 6
+        pad      = 14
+        box_h    = line_h * len(lines) + pad * 2
+        box_w    = W  # full width
+
+        # Vẽ nền đen mờ phía dưới
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        ov_draw = ImageDraw.Draw(overlay)
+        ov_draw.rectangle(
+            [(0, H - box_h), (box_w, H)],
+            fill=(0, 0, 0, 180)
+        )
+        img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+        draw = ImageDraw.Draw(img)
+
+        # Vẽ text
+        y = H - box_h + pad
+        for i, line in enumerate(lines):
+            f = font_bold if i == 0 else font
+            # Shadow
+            draw.text((pad + 1, y + 1), line, font=f, fill=(0, 0, 0, 200))
+            # Text màu vàng cho tọa độ, trắng cho còn lại
+            color = "#FFD700" if i == 0 else "#FFFFFF"
+            draw.text((pad, y), line, font=f, fill=color)
+            y += line_h
+
+        # Xuất về bytes JPEG
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=92)
+        return out.getvalue()
+
+    except Exception as e:
+        print(f"Stamp ảnh lỗi (bỏ qua): {e}")
+        return image_bytes
+
+
+def _save_photo(file_storage, store_code: str, slot: str,
+                lat: float = None, lon: float = None,
+                user_name: str = "", store_name: str = "") -> str:
+    """Upload ảnh lên Cloudinary kèm stamp GPS, hoặc lưu local."""
     import config as _config
+
+    image_bytes = file_storage.read()
+
+    # Stamp GPS + info lên ảnh
+    if lat is not None and lon is not None:
+        image_bytes = _stamp_photo(image_bytes, lat, lon, user_name, store_name)
+
     if _config.CLOUDINARY_CLOUD_NAME and _config.CLOUDINARY_CLOUD_NAME != "your_cloud_name":
         try:
             import cloudinary.uploader
@@ -47,13 +131,10 @@ def _save_photo(file_storage, store_code: str, slot: str) -> str:
                 api_secret = _config.CLOUDINARY_API_SECRET,
                 secure     = True,
             )
-            # Folder: salesfield/CH001
             folder = f"salesfield/{store_code}"
             result = cloudinary.uploader.upload(
-                file_storage.stream,
-                folder         = folder,
-                transformation = [{"width": 1280, "height": 960,
-                                   "crop": "limit", "quality": "auto:good"}],
+                io.BytesIO(image_bytes),
+                folder = folder,
             )
             return result["secure_url"]
         except Exception as e:
@@ -64,7 +145,8 @@ def _save_photo(file_storage, store_code: str, slot: str) -> str:
     ext = (file_storage.filename.rsplit(".", 1)[-1] or "jpg").lower()
     if ext not in ALLOWED: ext = "jpg"
     fname = f"s{slot}_{store_code}_{uuid.uuid4().hex[:8]}.{ext}"
-    file_storage.save(os.path.join(UPLOAD_DIR, fname))
+    with open(os.path.join(UPLOAD_DIR, fname), 'wb') as f:
+        f.write(image_bytes)
     return f"/static/uploads/{fname}"
 
 
@@ -193,14 +275,6 @@ def start_session():
 @sessions_bp.post("/photo")
 @require_auth
 def upload_photo():
-    """
-    multipart/form-data:
-      session_id : str
-      slot       : 1 | 2 | 3
-      latitude   : float
-      longitude  : float
-      photo      : file
-    """
     session_id = request.form.get("session_id")
     slot       = request.form.get("slot")
     lat        = request.form.get("latitude")
@@ -231,8 +305,20 @@ def upload_photo():
         if not within:
             return jsonify({"error": f"Ban dang cach cua hang {dist:.0f}m, phai o trong 200m de chup anh"}), 422
 
-        # Upload ảnh — dùng store_code làm tên folder
-        url = _save_photo(photo, store.store_code, slot)
+        # Lấy tên nhân viên để stamp
+        user = db.query(
+            __import__('models.user', fromlist=['User']).User
+        ).filter_by(id=g.user_id).first()
+        user_name  = user.full_name  if user  else g.user_id
+        store_name = store.store_name if store else store.store_code
+
+        # Upload ảnh kèm stamp GPS
+        url = _save_photo(
+            photo, store.store_code, slot,
+            lat=lat, lon=lon,
+            user_name=user_name,
+            store_name=store_name,
+        )
         now = datetime.now(VN_TZ)
 
         if base_slot == "1":
@@ -348,7 +434,6 @@ def checkout():
             photo_public_id="|".join(slot3_urls) if slot3_urls else None,
         )
         db.add(checkin)
-
         store.last_checkin_date = date.today()
         db.delete(sess)
         db.commit()
@@ -388,7 +473,6 @@ def cancel_session():
 @sessions_bp.delete("/force-clear")
 @require_auth
 def force_clear_session():
-    """Xoa tat ca session dang mo cua user hien tai."""
     db = SessionLocal()
     try:
         sessions = db.query(CheckinSession).filter_by(user_id=g.user_id).all()

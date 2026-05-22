@@ -607,6 +607,7 @@ body.light .toast { background: #ffffff; }
             <tbody id="checkins-table"></tbody>
           </table>
           <div class="mobile-cards" id="checkins-cards"></div>
+          <div id="checkin-pagination"></div>
         </div>
       </div>
 
@@ -1414,19 +1415,26 @@ function renderAssignments(rows) {
   }
 }
 
-// CHECKINS
-async function loadCheckins() {
-  const res = await api('GET', '/api/checkin/history?limit=50') || { data: [] };
-  allCheckins = res.data;
+// CHECKINS — phân trang server-side
+const CHECKIN_PAGE_SIZE = 20;
+let _checkinPage    = 0;
+let _checkinTotal   = 0;
+let _checkinSearchQ = '';
+
+async function loadCheckins(resetPage = true) {
+  if (resetPage) _checkinPage = 0;
+  const offset = _checkinPage * CHECKIN_PAGE_SIZE;
+  const res = await api('GET', `/api/checkin/history?limit=${CHECKIN_PAGE_SIZE}&offset=${offset}`) || { data: [], total: 0 };
+  _checkinTotal = res.total || 0;
+  allCheckins   = res.data  || [];
   renderCheckins(allCheckins);
+  renderCheckinPagination();
 }
 
 function filterCheckins(q) {
-  const lower = q.toLowerCase();
-  renderCheckins(allCheckins.filter(c =>
-    c.user_name?.toLowerCase().includes(lower) ||
-    c.store_name?.toLowerCase().includes(lower)
-  ));
+  _checkinSearchQ = q.toLowerCase();
+  _checkinPage = 0;
+  loadCheckins(false);
 }
 
 function buildPhotosHtml(c) {
@@ -1447,7 +1455,13 @@ function buildPhotosHtml(c) {
 }
 
 function renderCheckins(rows) {
-  document.getElementById('checkins-table').innerHTML = rows.map(c => `
+  const filtered = _checkinSearchQ
+    ? rows.filter(c =>
+        c.user_name?.toLowerCase().includes(_checkinSearchQ) ||
+        c.store_name?.toLowerCase().includes(_checkinSearchQ))
+    : rows;
+
+  document.getElementById('checkins-table').innerHTML = filtered.map(c => `
     <tr>
       <td style="color:var(--text2)">${fmtDate(c.checkin_at)}</td>
       <td style="font-weight:500">${c.user_name || '—'}</td>
@@ -1456,8 +1470,63 @@ function renderCheckins(rows) {
       <td>${c.duration_min ? c.duration_min + ' phút' : '—'}</td>
       <td style="display:flex;gap:2px;flex-wrap:wrap;align-items:center">${buildPhotosHtml(c)}</td>
       <td><button class="btn btn-danger btn-sm" onclick="deleteCheckin('${c.id}')">Xóa</button></td>
-    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px">Chưa có dữ liệu</td></tr>';
-  renderCheckinCards(rows);
+    </tr>`).join('') ||
+    '<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px">Chưa có dữ liệu</td></tr>';
+
+  renderCheckinCards(filtered);
+}
+
+function renderCheckinPagination() {
+  const container = document.getElementById('checkin-pagination');
+  if (!container) return;
+  const totalPages = Math.ceil(_checkinTotal / CHECKIN_PAGE_SIZE);
+  if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+  const cur  = _checkinPage;
+  const from = cur * CHECKIN_PAGE_SIZE + 1;
+  const to   = Math.min((cur + 1) * CHECKIN_PAGE_SIZE, _checkinTotal);
+
+  let pages = [];
+  if (totalPages <= 7) {
+    pages = Array.from({ length: totalPages }, (_, i) => i);
+  } else {
+    pages = [0];
+    if (cur > 2) pages.push('…');
+    for (let i = Math.max(1, cur - 1); i <= Math.min(totalPages - 2, cur + 1); i++) pages.push(i);
+    if (cur < totalPages - 3) pages.push('…');
+    pages.push(totalPages - 1);
+  }
+
+  container.innerHTML = `
+    <div style="
+      display:flex;align-items:center;justify-content:space-between;
+      padding:14px 16px;border-top:1px solid var(--border);
+      flex-wrap:wrap;gap:10px;
+    ">
+      <div style="font-size:12px;color:var(--text2)">
+        Hiển thị <strong style="color:var(--text)">${from}–${to}</strong>
+        trong <strong style="color:var(--text)">${_checkinTotal}</strong> check-in
+      </div>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="checkinGoPage(${cur - 1})"
+          ${cur === 0 ? 'disabled style="opacity:.4;pointer-events:none"' : ''}>← Trước</button>
+        ${pages.map(p => p === '…'
+          ? `<span style="padding:0 4px;color:var(--text2)">…</span>`
+          : `<button class="btn btn-sm ${p === cur ? 'btn-primary' : 'btn-ghost'}"
+               onclick="checkinGoPage(${p})">${p + 1}</button>`
+        ).join('')}
+        <button class="btn btn-ghost btn-sm" onclick="checkinGoPage(${cur + 1})"
+          ${cur >= totalPages - 1 ? 'disabled style="opacity:.4;pointer-events:none"' : ''}>Tiếp →</button>
+      </div>
+    </div>`;
+}
+
+function checkinGoPage(page) {
+  const totalPages = Math.ceil(_checkinTotal / CHECKIN_PAGE_SIZE);
+  if (page < 0 || page >= totalPages) return;
+  _checkinPage = page;
+  loadCheckins(false);
+  document.getElementById('page-checkins')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── MODALS ───────────────────────────────
@@ -2214,7 +2283,7 @@ async function deleteCheckin(checkinId) {
   try {
     await api('DELETE', `/api/checkin/${checkinId}`);
     showToast('Đã xóa check-in', 'success');
-    loadCheckins();
+    loadCheckins(false);     // ← false = giữ trang
   } catch(e) { showToast(e.message, 'error'); }
 }
 
