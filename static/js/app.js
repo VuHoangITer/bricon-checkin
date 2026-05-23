@@ -555,12 +555,15 @@ function openAddStoreModal() {
   document.getElementById('new-store-province').value = 'TP.HCM';
   document.getElementById('new-store-lat').value      = '';
   document.getElementById('new-store-lon').value      = '';
-  document.getElementById('new-store-gps').textContent = '📡 Chưa lấy GPS';
+  document.getElementById('new-store-gps').textContent = '📡 Đang lấy GPS tự động...';
   document.getElementById('new-store-gps').className  = 'gps-status';
   document.getElementById('name-check-msg').textContent = '';
   newStoreGPS = null;
   _fetchAutoCode('new');
   document.getElementById('modal-add-store').classList.remove('hidden');
+
+  // Tự động lấy GPS ngay khi mở form
+  captureGpsForNewStore();
 }
 
 async function _fetchAutoCode(storeType) {
@@ -599,6 +602,19 @@ async function submitNewStore() {
   const name = document.getElementById('new-store-name').value.trim();
   const type = document.getElementById('new-store-type').value;
   if (!name) { showToast('Cần nhập tên cửa hàng', 'error'); return; }
+
+  const lat = parseFloat(document.getElementById('new-store-lat').value);
+  const lon = parseFloat(document.getElementById('new-store-lon').value);
+
+  // Cảnh báo nếu có cửa hàng gần trong vòng 30m
+  if (lat && lon) {
+    const nearby = _findNearbyStores(lat, lon, 30);
+    if (nearby.length) {
+      const names = nearby.map(s => `• ${s.name} (${s.code}) — cách ${s.dist}m`).join('\n');
+      const ok = confirm(`⚠️ Có ${nearby.length} cửa hàng trong vòng 30m:\n${names}\n\nBạn có chắc muốn tạo cửa hàng mới không?`);
+      if (!ok) return;
+    }
+  }
 
   try {
     const payload = {
@@ -912,7 +928,7 @@ function _renderLocationBtns(props, coords) {
         </button>
       </div>`;
   } else {
-    // Đã có tọa độ → nút "Báo sai vị trí" nhỏ hơn, ít nổi bật hơn
+// Đã có tọa độ → nút "Báo sai vị trí" nhỏ hơn, ít nổi bật hơn
     el.innerHTML = `
       <button onclick="openLocationModal('fix')"
         style="width:100%;padding:8px;border-radius:8px;
@@ -922,4 +938,26 @@ function _renderLocationBtns(props, coords) {
         🗺️ Báo sai vị trí & cập nhật
       </button>`;
   }
+}
+
+function _findNearbyStores(lat, lon, maxMeters) {
+  const results = [];
+  (allFeatures || []).forEach(f => {
+    if (!f.geometry?.coordinates) return;
+    const [flon, flat] = f.geometry.coordinates;
+    const dist = _haversineJs(lat, lon, flat, flon);
+    if (dist <= maxMeters) {
+      results.push({ name: f.properties.name, code: f.properties.code, dist: Math.round(dist) });
+    }
+  });
+  return results.sort((a, b) => a.dist - b.dist);
+}
+
+function _haversineJs(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+    Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
