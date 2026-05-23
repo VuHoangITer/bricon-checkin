@@ -116,11 +116,15 @@ def do_checkin():
 @require_auth
 def history():
     store_id = request.args.get("store_id")
+    search_q = request.args.get("q", "").strip()
     limit    = min(int(request.args.get("limit", 20)), 100)
     offset   = int(request.args.get("offset", 0))
     db = SessionLocal()
     try:
-        # Base query với eager load — tránh N+1
+        from models.store import Store
+        from models.user  import User
+        from sqlalchemy   import or_
+
         q = db.query(Checkin).options(
             joinedload(Checkin.store),
             joinedload(Checkin.user),
@@ -129,16 +133,16 @@ def history():
             q = q.filter(Checkin.user_id == g.user_id)
         if store_id:
             q = q.filter(Checkin.store_id == store_id)
+        if search_q:
+            q = q.join(Checkin.user).join(Checkin.store).filter(
+                or_(
+                    User.full_name.ilike(f"%{search_q}%"),
+                    Store.store_name.ilike(f"%{search_q}%"),
+                )
+            )
 
-        # Đếm riêng không kéo data
-        count_q = db.query(func.count(Checkin.id))
-        if g.role == "sales":
-            count_q = count_q.filter(Checkin.user_id == g.user_id)
-        if store_id:
-            count_q = count_q.filter(Checkin.store_id == store_id)
-        total = count_q.scalar()
-
-        rows = q.order_by(desc(Checkin.checkin_at)).offset(offset).limit(limit).all()
+        total = q.with_entities(func.count(Checkin.id)).scalar()
+        rows  = q.order_by(desc(Checkin.checkin_at)).offset(offset).limit(limit).all()
         return jsonify({
             "total": total, "limit": limit, "offset": offset,
             "data": [r.to_dict() for r in rows],

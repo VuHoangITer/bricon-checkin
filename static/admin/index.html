@@ -1439,17 +1439,21 @@ let _checkinSearchQ = '';
 async function loadCheckins(resetPage = true) {
   if (resetPage) _checkinPage = 0;
   const offset = _checkinPage * CHECKIN_PAGE_SIZE;
-  const res = await api('GET', `/api/checkin/history?limit=${CHECKIN_PAGE_SIZE}&offset=${offset}`) || { data: [], total: 0 };
+  const q = _checkinSearchQ ? `&q=${encodeURIComponent(_checkinSearchQ)}` : '';
+  const res = await api('GET', `/api/checkin/history?limit=${CHECKIN_PAGE_SIZE}&offset=${offset}${q}`) || { data: [], total: 0 };
   _checkinTotal = res.total || 0;
   allCheckins   = res.data  || [];
   renderCheckins(allCheckins);
   renderCheckinPagination();
 }
 
+let _filterCheckinTimer = null;
 function filterCheckins(q) {
-  _checkinSearchQ = q.toLowerCase();
+  _checkinSearchQ = q;
   _checkinPage = 0;
-  loadCheckins(false);
+  _checkinRenderHash = '';
+  clearTimeout(_filterCheckinTimer);
+  _filterCheckinTimer = setTimeout(() => loadCheckins(false), 300);
 }
 
 function buildPhotosHtml(c) {
@@ -1470,11 +1474,7 @@ function buildPhotosHtml(c) {
 }
 
 function renderCheckins(rows) {
-  const filtered = _checkinSearchQ
-    ? rows.filter(c =>
-        c.user_name?.toLowerCase().includes(_checkinSearchQ) ||
-        c.store_name?.toLowerCase().includes(_checkinSearchQ))
-    : rows;
+  const filtered = rows;
 
   document.getElementById('checkins-table').innerHTML = filtered.map(c => `
     <tr>
