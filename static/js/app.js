@@ -576,22 +576,6 @@ async function onStoreTypeChange(sel) {
 }
 
 async function onStoreNameInput(input) {
-  const name = input.value.trim();
-  const msg = document.getElementById('name-check-msg');
-  if (!name) { msg.textContent = ''; return; }
-  clearTimeout(_nameCheckTimer);
-  _nameCheckTimer = setTimeout(async () => {
-    try {
-      const res = await api.checkStoreName(name);
-      if (res.duplicate) {
-        msg.textContent = `❌ Tên "${res.existing}" đã tồn tại`;
-        msg.style.color = 'var(--danger)';
-      } else {
-        msg.textContent = '✅ Tên hợp lệ';
-        msg.style.color = 'var(--success)';
-      }
-    } catch {}
-  }, 500);
 }
 
 function captureGpsForNewStore() {
