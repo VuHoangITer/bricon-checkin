@@ -617,11 +617,6 @@ async function submitNewStore() {
   if (!name) { showToast('Cần nhập tên cửa hàng', 'error'); return; }
 
   try {
-    const check = await api.checkStoreName(name);
-    if (check.duplicate) { showToast(`Tên "${check.existing}" đã tồn tại`, 'error'); return; }
-  } catch {}
-
-  try {
     const payload = {
       store_name: name,
       store_type: type,
