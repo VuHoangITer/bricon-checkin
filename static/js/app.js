@@ -90,7 +90,16 @@ function toggleSidebar() {
 }
 
 window.addEventListener('resize', () => {
+  // Bỏ qua resize do bàn phím ảo (chỉ thay đổi chiều cao, không thay đổi chiều rộng)
   if (window.innerWidth <= 768 && sidebarOpen) {
+    // Kiểm tra xem có element nào đang được focus không (bàn phím đang mở)
+    const active = document.activeElement;
+    const isKeyboardOpen = active && (
+      active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.tagName === 'SELECT'
+    );
+    if (isKeyboardOpen) return; // Bàn phím vừa mở → bỏ qua
     sidebarOpen = false;
     document.getElementById('sidebar').classList.add('collapsed');
     const overlay = document.getElementById('sidebar-overlay');
