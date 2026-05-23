@@ -117,8 +117,11 @@ def do_checkin():
 def history():
     store_id = request.args.get("store_id")
     search_q = request.args.get("q", "").strip()
-    limit    = min(int(request.args.get("limit", 20)), 100)
-    offset   = int(request.args.get("offset", 0))
+    user_id = request.args.get("user_id", "").strip()
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+    limit = min(int(request.args.get("limit", 20)), 100)
+    offset = int(request.args.get("offset", 0))
     db = SessionLocal()
     try:
         from models.store import Store
@@ -140,6 +143,15 @@ def history():
                     Store.store_name.ilike(f"%{search_q}%"),
                 )
             )
+        if user_id:
+            q = q.filter(Checkin.user_id == user_id)
+        if date_from:
+            q = q.filter(Checkin.checkin_at >= date_from)
+        if date_to:
+            # +1 ngày để lấy hết ngày cuối
+            from datetime import datetime, timedelta
+            dt = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            q = q.filter(Checkin.checkin_at < dt)
 
         total = q.with_entities(func.count(Checkin.id)).scalar()
         rows  = q.order_by(desc(Checkin.checkin_at)).offset(offset).limit(limit).all()

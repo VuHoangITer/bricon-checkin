@@ -600,11 +600,17 @@ body.light .toast { background: #ffffff; }
         </div>
       </div>
 
-      <!-- CHECKINS PAGE -->
+<!-- CHECKINS PAGE -->
       <div class="page" id="page-checkins">
-        <div class="search-bar">
-          <input class="search-input" type="search" placeholder="Tìm theo tên nhân viên hoặc cửa hàng..."
-                 oninput="filterCheckins(this.value)">
+        <div class="search-bar" style="flex-wrap:wrap;gap:8px">
+          <input class="search-input" type="search" placeholder="Tìm tên cửa hàng..."
+                 oninput="filterCheckins(this.value)" style="min-width:160px">
+          <select class="search-input" id="checkin-filter-user" onchange="applyCheckinFilters()" style="flex:0;min-width:180px">
+            <option value="">Tất cả nhân viên</option>
+          </select>
+          <input class="search-input" type="date" id="checkin-filter-from" onchange="applyCheckinFilters()" style="flex:0;min-width:140px" title="Từ ngày">
+          <input class="search-input" type="date" id="checkin-filter-to"   onchange="applyCheckinFilters()" style="flex:0;min-width:140px" title="Đến ngày">
+          <button class="btn btn-ghost btn-sm" onclick="clearCheckinFilters()" style="flex:0">Xoá lọc</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -1182,7 +1188,7 @@ async function loadPage(name) {
   if (name === 'employees')      await loadEmployees();
   if (name === 'stores')         await loadStores();
   if (name === 'assignments')    await loadAssignments();
-  if (name === 'checkins')       await loadCheckins();
+  if (name === 'checkins')       await loadCheckinsPage();
   if (name === 'calls')          await loadCalls();
   if (name === 'settings')       await loadSettings();
   if (name === 'map')            await loadAdminMap();
@@ -1435,25 +1441,59 @@ const CHECKIN_PAGE_SIZE = 20;
 let _checkinPage    = 0;
 let _checkinTotal   = 0;
 let _checkinSearchQ = '';
+let _checkinUserId  = '';
+let _checkinDateFrom = '';
+let _checkinDateTo   = '';
 
 async function loadCheckins(resetPage = true) {
   if (resetPage) _checkinPage = 0;
   const offset = _checkinPage * CHECKIN_PAGE_SIZE;
-  const q = _checkinSearchQ ? `&q=${encodeURIComponent(_checkinSearchQ)}` : '';
-  const res = await api('GET', `/api/checkin/history?limit=${CHECKIN_PAGE_SIZE}&offset=${offset}${q}`) || { data: [], total: 0 };
+  let params = `limit=${CHECKIN_PAGE_SIZE}&offset=${offset}`;
+  if (_checkinSearchQ)  params += `&q=${encodeURIComponent(_checkinSearchQ)}`;
+  if (_checkinUserId)   params += `&user_id=${encodeURIComponent(_checkinUserId)}`;
+  if (_checkinDateFrom) params += `&date_from=${_checkinDateFrom}`;
+  if (_checkinDateTo)   params += `&date_to=${_checkinDateTo}`;
+  const res = await api('GET', `/api/checkin/history?${params}`) || { data: [], total: 0 };
   _checkinTotal = res.total || 0;
   allCheckins   = res.data  || [];
   renderCheckins(allCheckins);
   renderCheckinPagination();
 }
 
+async function loadCheckinsPage() {
+  // Populate dropdown nhân viên nếu chưa có
+  if (!allEmployees.length) allEmployees = await api('GET', '/api/auth/users') || [];
+  const sel = document.getElementById('checkin-filter-user');
+  if (sel && sel.options.length <= 1) {
+    sel.innerHTML = '<option value="">Tất cả nhân viên</option>' +
+      allEmployees.map(u => `<option value="${u.id}">${u.full_name}</option>`).join('');
+  }
+  await loadCheckins();
+}
+
 let _filterCheckinTimer = null;
 function filterCheckins(q) {
   _checkinSearchQ = q;
   _checkinPage = 0;
-  _checkinRenderHash = '';
   clearTimeout(_filterCheckinTimer);
   _filterCheckinTimer = setTimeout(() => loadCheckins(false), 300);
+}
+function applyCheckinFilters() {
+  _checkinUserId   = document.getElementById('checkin-filter-user')?.value || '';
+  _checkinDateFrom = document.getElementById('checkin-filter-from')?.value || '';
+  _checkinDateTo   = document.getElementById('checkin-filter-to')?.value   || '';
+  _checkinPage = 0;
+  loadCheckins(false);
+}
+function clearCheckinFilters() {
+  document.getElementById('checkin-filter-user').value = '';
+  document.getElementById('checkin-filter-from').value = '';
+  document.getElementById('checkin-filter-to').value   = '';
+  _checkinUserId = ''; _checkinDateFrom = ''; _checkinDateTo = '';
+  _checkinSearchQ = '';
+  document.querySelector('#page-checkins .search-input[type=search]').value = '';
+  _checkinPage = 0;
+  loadCheckins(false);
 }
 
 function buildPhotosHtml(c) {
