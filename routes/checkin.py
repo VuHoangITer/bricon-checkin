@@ -2,7 +2,8 @@ import os
 import uuid
 from datetime import date
 from flask import Blueprint, request, jsonify, g, current_app
-from sqlalchemy import desc
+from sqlalchemy import desc, func
+from sqlalchemy.orm import joinedload
 from extensions import SessionLocal
 from models.store      import Store
 from models.assignment import Assignment
@@ -16,7 +17,6 @@ ALLOWED_EXT = {"jpg", "jpeg", "png", "webp"}
 
 
 def _save_photo_local(file_storage, store_code: str) -> tuple[str, str]:
-    """Luu anh vao static/uploads/, tra ve (url, public_id)."""
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     ext = file_storage.filename.rsplit(".", 1)[-1].lower()
     if ext not in ALLOWED_EXT:
@@ -29,7 +29,6 @@ def _save_photo_local(file_storage, store_code: str) -> tuple[str, str]:
 
 
 def _save_photo_cloudinary(file_storage, store_code: str) -> tuple[str, str]:
-    """Upload anh len Cloudinary."""
     import cloudinary.uploader
     import config
     cloudinary.config(
@@ -47,7 +46,6 @@ def _save_photo_cloudinary(file_storage, store_code: str) -> tuple[str, str]:
 
 
 def _upload_photo(file_storage, store_code: str) -> tuple[str, str]:
-    """Tu dong chon cloudinary neu co config, nguoc lai luu local."""
     import config
     if config.CLOUDINARY_CLOUD_NAME and config.CLOUDINARY_CLOUD_NAME != "your_cloud_name":
         return _save_photo_cloudinary(file_storage, store_code)
@@ -82,14 +80,12 @@ def do_checkin():
         if not within:
             return jsonify({"error": f"Ban dang cach cua hang {dist:.0f}m (toi da 200m)"}), 422
 
-        # Upload anh
         photo_url = photo_pid = None
         photo = request.files.get("photo")
         if photo and photo.filename:
             try:
                 photo_url, photo_pid = _upload_photo(photo, store.store_code)
             except Exception as e:
-                # Khong bat buoc phai co anh, log loi nhung van cho checkin
                 print(f"Upload anh loi: {e}")
 
         checkin = Checkin(
@@ -124,13 +120,25 @@ def history():
     offset   = int(request.args.get("offset", 0))
     db = SessionLocal()
     try:
-        q = db.query(Checkin)
+        # Base query với eager load — tránh N+1
+        q = db.query(Checkin).options(
+            joinedload(Checkin.store),
+            joinedload(Checkin.user),
+        )
         if g.role == "sales":
-            q = q.filter_by(user_id=g.user_id)
+            q = q.filter(Checkin.user_id == g.user_id)
         if store_id:
             q = q.filter(Checkin.store_id == store_id)
-        total = q.count()
-        rows  = q.order_by(desc(Checkin.checkin_at)).offset(offset).limit(limit).all()
+
+        # Đếm riêng không kéo data
+        count_q = db.query(func.count(Checkin.id))
+        if g.role == "sales":
+            count_q = count_q.filter(Checkin.user_id == g.user_id)
+        if store_id:
+            count_q = count_q.filter(Checkin.store_id == store_id)
+        total = count_q.scalar()
+
+        rows = q.order_by(desc(Checkin.checkin_at)).offset(offset).limit(limit).all()
         return jsonify({
             "total": total, "limit": limit, "offset": offset,
             "data": [r.to_dict() for r in rows],
@@ -150,9 +158,7 @@ def delete_checkin(checkin_id):
         if not checkin:
             return jsonify({"error": "Khong tim thay"}), 404
 
-        # ── Xóa file ảnh local trước khi xóa record ──────────────
         def _delete_local(url):
-            """Xóa file trong static/uploads/ nếu là ảnh local."""
             if not url or not url.startswith("/static/uploads/"):
                 return
             path = os.path.join(
@@ -165,25 +171,17 @@ def delete_checkin(checkin_id):
             except Exception as e:
                 print(f"Loi xoa file {path}: {e}")
 
-        # Xóa photo1 (photo_url)
         _delete_local(checkin.photo_url)
-
-        # Xóa photo2
         _delete_local(checkin.photo2_url)
 
-        # Xóa photo3 và các ảnh slot3 trong photo_public_id
-        # photo_public_id chứa URLs pipe-separated cho ảnh local,
-        # hoặc Cloudinary public_id cho ảnh cloud
         if checkin.photo_public_id:
             for entry in checkin.photo_public_id.split("|"):
                 entry = entry.strip()
                 if not entry:
                     continue
                 if entry.startswith("/static/uploads/"):
-                    # Ảnh local
                     _delete_local(entry)
                 elif "/" in entry and not entry.startswith("http"):
-                    # Cloudinary public_id (dạng "salesfield/CH001/abc123")
                     try:
                         import cloudinary.uploader
                         import config
@@ -196,14 +194,12 @@ def delete_checkin(checkin_id):
                     except Exception as e:
                         print(f"Loi xoa Cloudinary {entry}: {e}")
         else:
-            # Fallback: photo3_url riêng lẻ
             _delete_local(checkin.photo3_url)
 
         store_id = checkin.store_id
         db.delete(checkin)
         db.flush()
 
-        # Cập nhật lại last_checkin_date cho store
         latest = db.query(Checkin).filter_by(store_id=store_id) \
                    .order_by(desc(Checkin.checkin_at)).first()
         store = db.query(Store).filter_by(id=store_id).first()
