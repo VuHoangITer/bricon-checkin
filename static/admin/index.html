@@ -1198,27 +1198,24 @@ async function loadPage(name) {
 
 // DASHBOARD
 async function loadDashboard() {
-  const [stores, users, checkins] = await Promise.all([
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+
+  const [stores, users, checkinToday, checkinRecent] = await Promise.all([
     api('GET', '/api/stores/'),
     api('GET', '/api/auth/users'),
+    api('GET', `/api/checkin/history?limit=1&date_from=${today}&date_to=${today}`),
     api('GET', '/api/checkin/history?limit=10'),
   ]);
 
   document.getElementById('stat-stores').textContent    = stores?.length || 0;
   document.getElementById('stat-employees').textContent = users?.length  || 0;
-
-  const today = new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-  const todayCheckins = checkins?.data?.filter(c => {
-    const d = new Date(c.checkin_at).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-    return d === today;
-  }) || [];
-  document.getElementById('stat-checkins-today').textContent = todayCheckins.length;
+  document.getElementById('stat-checkins-today').textContent = checkinToday?.total || 0;
 
   const thisMonth = new Date().toISOString().slice(0, 7);
   const notVisited = stores?.filter(s => !s.last_checkin || !s.last_checkin.startsWith(thisMonth)) || [];
   document.getElementById('stat-not-visited').textContent = notVisited.length;
 
-  renderRecentCheckins(checkins?.data || []);
+  renderRecentCheckins(checkinRecent?.data || []);
 }
 
 function renderRecentCheckins(rows) {
