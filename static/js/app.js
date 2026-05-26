@@ -37,6 +37,7 @@ async function startApp() {
   initMap();
   await loadMapData();
   await loadActiveSession();
+  _startLocationPing();
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -969,4 +970,28 @@ function _haversineJs(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat/2)**2 +
     Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ─────────────────────────────────────────
+// LOCATION PING (ngầm)
+// ─────────────────────────────────────────
+function _startLocationPing() {
+  const role = currentUser?.role || '';
+  if (!['sales', 'telesales'].includes(role)) return;
+
+  function _ping() {
+    navigator.geolocation.getCurrentPosition(pos => {
+      fetch('/api/location/ping', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('sf_token')}`,
+        },
+        body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      }).catch(() => {});
+    }, () => {}, { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+  }
+
+  _ping();
+  setInterval(_ping, 3 * 60 * 1000);
 }

@@ -384,6 +384,9 @@ body.light .toast { background: #ffffff; }
       <button class="nav-item" onclick="showPage('gallery', this)">
         <span class="nav-icon">📷</span> Thư viện ảnh
       </button>
+      <button class="nav-item" onclick="showPage('live-map', this)">
+        <span class="nav-icon">📡</span> Trực tiếp
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -717,6 +720,20 @@ body.light .toast { background: #ffffff; }
         <div id="gallery-loading"
           style="text-align:center;padding:48px;color:var(--text2)">
           ⏳ Đang tải từ Cloudinary...
+        </div>
+      </div>
+
+      <!-- LIVE MAP PAGE -->
+      <div class="page" id="page-live-map">
+        <div class="map-page-wrap" style="height:calc(100vh - var(--topbar-h));margin:-24px">
+          <div id="live-map" style="width:100%;height:100%"></div>
+          <div style="
+            position:absolute;bottom:24px;left:50%;transform:translateX(-50%);
+            background:var(--surface);border:1px solid var(--border);
+            border-radius:10px;padding:10px 16px;z-index:800;
+            font-size:12px;color:var(--text2);
+            box-shadow:0 4px 16px rgba(0,0,0,.3);white-space:nowrap;
+          ">📡 Tự động làm mới mỗi 30 giây · chỉ hiện khi nhân viên đang mở app</div>
         </div>
       </div>
 
@@ -1155,6 +1172,7 @@ const TITLES = {
   map:      'Bản đồ khách hàng',
   'location-logs': '📌 Lịch sử thay đổi vị trí',
   'gallery':        '📷 Thư viện ảnh check-in',
+  'live-map':       '📡 Vị trí nhân viên',
 };
 
 const PAGE_ACTIONS = {
@@ -1168,6 +1186,7 @@ const PAGE_ACTIONS = {
   map:             () => ``,
   'location-logs': () => ``,
   'gallery':        () => ``,
+  'live-map':       () => `<button class="btn btn-ghost btn-sm" onclick="loadLiveMap()">🔄 Làm mới</button>`,
 };
 
 function showPage(name, btn) {
@@ -1184,6 +1203,10 @@ function showPage(name, btn) {
 let allEmployees = [], allStores = [], allAssignments = [], allCheckins = [];
 
 async function loadPage(name) {
+  if (name !== 'live-map' && liveMapTimer) {
+    clearInterval(liveMapTimer);
+    liveMapTimer = null;
+  }
   if (name === 'dashboard')      await loadDashboard();
   if (name === 'employees')      await loadEmployees();
   if (name === 'stores')         await loadStores();
@@ -1194,6 +1217,7 @@ async function loadPage(name) {
   if (name === 'map')            await loadAdminMap();
   if (name === 'location-logs')  await loadLocationLogs();
   if (name === 'gallery')        await loadGallery();
+  if (name === 'live-map')       await loadLiveMap();
 }
 
 // DASHBOARD
@@ -2666,6 +2690,62 @@ async function deleteCloudinaryPhoto(encodedPublicId, btn) {
     btn.disabled = false;
     btn.textContent = '🗑️ Xóa khỏi Cloudinary';
   }
+}
+
+// ── LIVE MAP ────────────────────────────
+let liveMap = null, liveMarkersLayer = null, liveMapTimer = null;
+
+async function loadLiveMap() {
+  if (!liveMap) {
+    liveMap = L.map('live-map', { center: [10.8231, 106.6297], zoom: 12 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap', maxZoom: 19
+    }).addTo(liveMap);
+    liveMarkersLayer = L.layerGroup().addTo(liveMap);
+  }
+  setTimeout(() => liveMap.invalidateSize(), 150);
+  await _refreshLiveMarkers();
+  if (liveMapTimer) clearInterval(liveMapTimer);
+  liveMapTimer = setInterval(_refreshLiveMarkers, 30000);
+}
+
+async function _refreshLiveMarkers() {
+  const data = await api('GET', '/api/location/live') || [];
+  liveMarkersLayer.clearLayers();
+  if (!data.length) return;
+
+  const bounds = [];
+  data.forEach(u => {
+    const initials = u.full_name.split(' ').pop().charAt(0).toUpperCase();
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="
+        width:40px;height:40px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+        background:#3b82f6;border:3px solid #fff;
+        box-shadow:0 2px 8px rgba(0,0,0,.4);
+        display:flex;align-items:center;justify-content:center;
+      "><span style="transform:rotate(45deg);color:#fff;font-size:13px;font-weight:700">${initials}</span></div>`,
+      iconSize: [40, 40],
+      iconAnchor: [12, 40],
+    });
+
+    const updatedAt = new Date(u.updated_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+    const marker = L.marker([u.lat, u.lon], { icon });
+    marker.bindPopup(`
+      <div style="font-family:'Be Vietnam Pro',sans-serif;min-width:180px">
+        <div style="font-weight:600;font-size:14px">${u.full_name}</div>
+        <div style="font-size:11px;color:#9ca3af;margin-top:2px">🕐 ${updatedAt}</div>
+        <a href="https://www.google.com/maps?q=${u.lat},${u.lon}" target="_blank"
+           style="font-size:12px;color:#3b82f6;display:block;margin-top:6px">
+          Xem trên Google Maps ↗
+        </a>
+      </div>
+    `, { maxWidth: 240 });
+    liveMarkersLayer.addLayer(marker);
+    bounds.push([u.lat, u.lon]);
+  });
+
+  if (bounds.length) liveMap.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
 }
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

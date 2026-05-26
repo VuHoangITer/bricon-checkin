@@ -12,6 +12,7 @@ from routes.stores  import stores_bp
 from routes.checkin import checkin_bp
 from routes.sessions import sessions_bp
 from routes.calls import calls_bp
+from routes.location import location_bp
 
 app = Flask(__name__, static_folder="static")
 app.config["SECRET_KEY"]            = config.JWT_SECRET
@@ -27,6 +28,7 @@ app.register_blueprint(stores_bp,  url_prefix="/api/stores")
 app.register_blueprint(checkin_bp,  url_prefix="/api/checkin")
 app.register_blueprint(sessions_bp, url_prefix="/api/session")
 app.register_blueprint(calls_bp,    url_prefix="/api/calls")
+app.register_blueprint(location_bp,  url_prefix="/api/location")
 
 
 # PWA files
