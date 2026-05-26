@@ -1,5 +1,5 @@
 // Đổi tên cache để force SW update, xóa cache cũ
-const CACHE = 'sf-v2';
+const CACHE = 'sf-v3';
 const ASSETS = [
   '/',
   '/static/css/style.css',
