@@ -1,13 +1,26 @@
 from flask import Blueprint, request, jsonify, g
-from extensions import SessionLocal
-from models.user import User
 from utils import require_auth
 from datetime import datetime, timezone, timedelta
+from extensions import SessionLocal
+from models.user import User
+import json, os
 
 location_bp = Blueprint("location", __name__)
 VN_TZ = timezone(timedelta(hours=7))
 
-_live_locations = {}
+# Lưu vào file thay vì memory
+_LOC_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "live_locations.json")
+
+def _read():
+    try:
+        with open(_LOC_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def _write(data):
+    with open(_LOC_FILE, "w") as f:
+        json.dump(data, f)
 
 @location_bp.post("/ping")
 @require_auth
@@ -25,13 +38,15 @@ def ping():
     finally:
         db.close()
 
-    _live_locations[str(g.user_id)] = {
+    locs = _read()
+    locs[str(g.user_id)] = {
         "lat":        lat,
         "lon":        lon,
         "full_name":  full_name,
         "role":       g.role,
         "updated_at": datetime.now(VN_TZ).isoformat(),
     }
+    _write(locs)
     return jsonify({"ok": True})
 
 @location_bp.get("/live")
@@ -39,4 +54,4 @@ def ping():
 def live():
     if g.role not in ("admin", "manager"):
         return jsonify({"error": "Không có quyền"}), 403
-    return jsonify(list(_live_locations.values()))
+    return jsonify(list(_read().values()))
